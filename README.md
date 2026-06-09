@@ -17,4 +17,4 @@ https://yogeshcoodes.github.io/offline-llm/
 
 ## 📥 Download
 
-[![Download APK](https://img.shields.io/badge/Download-APK-brightgreen)](https://github.com/yogeshcoodes/offline-llm/releases/download/offline-llm/app-debug.apk)
+[![Download APK](https://img.shields.io/badge/Download-APK-brightgreen)](https://github.com/yogeshcoodes/offline-llm/releases/download/ai-app/app-debug.apk)
