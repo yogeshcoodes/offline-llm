@@ -199,6 +199,9 @@
                                 <line x1="8" y1="23" x2="16" y2="23" />
                             </svg>
                         </button>
+                        <button class="icon-btn" id="btnAttachWelcome" title="Attach files (coming soon)">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-paperclip-icon lucide-paperclip"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg>
+                        </button>
                         <button class="icon-btn" id="btnSendWelcome" disabled>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                                 stroke-linecap="round" stroke-linejoin="round">
@@ -224,6 +227,9 @@
                             <line x1="12" y1="19" x2="12" y2="23" />
                             <line x1="8" y1="23" x2="16" y2="23" />
                         </svg>
+                    </button>
+                    <button class="icon-btn" id="btnAttach" title="Attach files (coming soon)">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-paperclip-icon lucide-paperclip"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg>
                     </button>
                     <button class="icon-btn" id="btnSend" disabled>
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -253,6 +259,11 @@
                 <textarea id="customInstructions" rows="3"
                     placeholder="How should the AI respond? (e.g., 'Keep answers short and friendly')"
                     style="width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 8px; font-family: inherit; font-size: 0.9rem; resize: vertical; background: var(--surface); color: var(--text);"></textarea>
+            </div>
+            <div class="setting-row" style="flex-direction: column; align-items: flex-start; gap: 8px;">
+                <label for="apiKeyInput">API Key</label>
+                <input type="password" id="apiKeyInput" placeholder="Enter API key (e.g., AQ...)"
+                    style="width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 8px; font-family: inherit; font-size: 0.9rem; background: var(--surface); color: var(--text);">
             </div>
             <div class="setting-row accent-picker-row">
                 <label>Accent colour</label>

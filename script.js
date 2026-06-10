@@ -46,6 +46,33 @@
         }
     }
 
+    // ==================== GEMINI API CALL ====================
+    async function callGeminiAPI(prompt, apiKey) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const requestBody = {
+            contents: [{ parts: [{ text: prompt }] }]
+        };
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`API error (${response.status}): ${errorText}`);
+        }
+        const data = await response.json();
+        const candidates = data.candidates;
+        if (!candidates || candidates.length === 0) {
+            throw new Error('API returned no response');
+        }
+        const content = candidates[0].content;
+        if (!content || !content.parts || content.parts.length === 0) {
+            throw new Error('API response missing content');
+        }
+        return content.parts[0].text;
+    }
+
     // ==================== DOM REFS ====================
     const app = document.getElementById('app');
     const splashOverlay = document.getElementById('splashOverlay');
@@ -80,6 +107,7 @@
     const noRecentChats = document.getElementById('noRecentChats');
     const searchInput = document.getElementById('searchInput');
     const customInstructionsInput = document.getElementById('customInstructions');
+    const apiKeyInput = document.getElementById('apiKeyInput');
 
     // ==================== STATE ====================
     let currentConversation = [];
@@ -90,6 +118,7 @@
     let allConversations = [];
     let activeConversationId = null;
     let customInstructions = localStorage.getItem('customInstructions') || '';
+    let apiKey = localStorage.getItem('apiKey') || '';
 
     function applyAccent(color) {
         currentAccent = color;
@@ -103,6 +132,7 @@
 
     customInstructionsInput.value = customInstructions;
     function saveCustomInstructions(val) { customInstructions = val; localStorage.setItem('customInstructions', val); }
+    apiKeyInput.value = apiKey;
 
     function showToast(msg, duration = 2500) {
         toast.textContent = msg; toast.style.display = 'block';
@@ -244,7 +274,7 @@
         const sendBtn = activeInput === 'welcome' ? btnSendWelcome : btnSend;
         const text = inputEl.value.trim();
         if (!text) return;
-        if (!modelReady) { showToast("AI engine is initializing, please wait..."); return; }
+        if (!modelReady && !apiKey) { showToast("AI engine not ready. Set API key in Settings or wait."); return; }
 
         inputEl.value = ''; inputEl.style.height = 'auto';
         appendMessage('user', text); renderRecentChats();
@@ -263,14 +293,36 @@
         }, 30000);
 
         try {
-            const response = await new Promise((resolve, reject) => {
-                askLocalLLM(prompt, (res) => { clearTimeout(timeoutId); resolve(res); }, (err) => { clearTimeout(timeoutId); reject(err); });
-            });
+            let response;
+            if (apiKey) {
+                try {
+                    response = await callGeminiAPI(prompt, apiKey);
+                } catch (apiErr) {
+                    console.warn('Gemini API error, falling back to local:', apiErr);
+                    showToast('API error, trying local model...');
+                    if (modelReady && window.AndroidTFLite) {
+                        response = await new Promise((resolve, reject) => {
+                            askLocalLLM(prompt, resolve, reject);
+                        });
+                    } else {
+                        throw new Error('Both API and local model unavailable. Check your API key or wait for the model to load.');
+                    }
+                }
+            } else {
+                if (!modelReady || !window.AndroidTFLite) {
+                    throw new Error('Local model not ready');
+                }
+                response = await new Promise((resolve, reject) => {
+                    askLocalLLM(prompt, resolve, reject);
+                });
+            }
+            clearTimeout(timeoutId);
             showTypingIndicator(false);
             appendMessage('ai', response);
         } catch (err) {
+            clearTimeout(timeoutId);
             showTypingIndicator(false);
-            appendMessage('ai', '⚠️ ' + (err || 'Unknown error'));
+            appendMessage('ai', '⚠️ ' + (err.message || 'Unknown error'));
         } finally {
             btnSend.disabled = false; btnSendWelcome.disabled = false;
             saveCurrentConversation(false); renderRecentChats();
@@ -325,7 +377,6 @@
 
     function updateLogos(dark) {
         welcomeLogo.src = dark ? 'logo-white.png' : 'logo-black.png';
-        // Also update splash logo if still visible (though it will be hidden soon)
         if (splashLogoImg) splashLogoImg.src = dark ? 'logo-white.png' : 'logo-black.png';
     }
     function setTheme(dark) {
@@ -385,12 +436,15 @@
     document.getElementById('btnSettings').addEventListener('click', () => {
         sendOnEnterCheckbox.checked = sendOnEnter;
         customInstructionsInput.value = customInstructions;
+        apiKeyInput.value = apiKey;
         settingsModalOverlay.classList.remove('hidden');
     });
     document.getElementById('btnSettingsClose').addEventListener('click', () => settingsModalOverlay.classList.add('hidden'));
     document.getElementById('btnSettingsSave').addEventListener('click', () => {
         sendOnEnter = sendOnEnterCheckbox.checked;
         saveCustomInstructions(customInstructionsInput.value.trim());
+        apiKey = apiKeyInput.value.trim();
+        localStorage.setItem('apiKey', apiKey);
         showToast('Settings saved');
         settingsModalOverlay.classList.add('hidden');
     });
@@ -398,6 +452,8 @@
 
     document.getElementById('btnMic').addEventListener('click', () => showToast('Voice input coming soon'));
     document.getElementById('btnMicWelcome').addEventListener('click', () => showToast('Voice input coming soon'));
+    document.getElementById('btnAttachWelcome').addEventListener('click', () => showToast('File attachment coming soon'));
+    document.getElementById('btnAttach').addEventListener('click', () => showToast('File attachment coming soon'));
 
     // ==================== SPLASH & INIT ====================
     function hideSplash() {
@@ -415,9 +471,11 @@
             if (window.AndroidTFLite) {
                 modelReady = true;
                 console.log("Bridge initialized.");
-                showToast('Local Qwen3 model ready');
+                if (!apiKey) showToast('Local Qwen3 model ready');
+                else showToast('API key set – using cloud model');
             } else {
-                showToast('Running in browser – model not available');
+                if (!apiKey) showToast('Running in browser – model not available. Set API key in Settings.');
+                else showToast('API key set – using cloud model');
             }
         } catch (e) {
             console.error("Init error:", e);
@@ -427,12 +485,10 @@
         welcomeUserInput.focus();
     }
 
-    // Set splash logo based on theme
     if (splashLogoImg) {
         splashLogoImg.src = (savedTheme === 'dark') ? 'logo-white.png' : 'logo-black.png';
     }
 
-    // Splash animation duration (2.5s) then hide and start the app
     setTimeout(() => {
         hideSplash();
         startApp();
