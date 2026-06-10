@@ -274,7 +274,10 @@
         const sendBtn = activeInput === 'welcome' ? btnSendWelcome : btnSend;
         const text = inputEl.value.trim();
         if (!text) return;
-        if (!modelReady && !apiKey) { showToast("AI engine not ready. Set API key in Settings or wait."); return; }
+        if (!modelReady && !apiKey) {
+            showToast("AI engine not ready. Set API key in Settings or wait.");
+            return;
+        }
 
         inputEl.value = ''; inputEl.style.height = 'auto';
         appendMessage('user', text); renderRecentChats();
@@ -298,14 +301,14 @@
                 try {
                     response = await callGeminiAPI(prompt, apiKey);
                 } catch (apiErr) {
-                    console.warn('Gemini API error, falling back to local:', apiErr);
-                    showToast('API error, trying local model...');
+                    console.warn('Gemini API error:', apiErr);
                     if (modelReady && window.AndroidTFLite) {
+                        showToast('API error, trying local model...');
                         response = await new Promise((resolve, reject) => {
                             askLocalLLM(prompt, resolve, reject);
                         });
                     } else {
-                        throw new Error('Both API and local model unavailable. Check your API key or wait for the model to load.');
+                        throw new Error(`API call failed: ${apiErr.message}`);
                     }
                 }
             } else {
