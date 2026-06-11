@@ -1,3 +1,4 @@
+
 /* ===== Google Sans Font ===== */
 @font-face {
     font-family: 'Google Sans';
@@ -1137,10 +1138,14 @@ textarea {
     .input-container {
         gap: 8px;
         padding-left: 14px;
+        /* Mobile layout fix */
+        flex-wrap: wrap;
+        justify-content: flex-end;
     }
 
-    /* FIX: make textarea taller on mobile */
+    /* Target the textarea inside the container on mobile */
     .input-container textarea {
-        min-height: 44px;
+        flex: 1 1 100%;
+        min-width: 100%;
     }
 }
