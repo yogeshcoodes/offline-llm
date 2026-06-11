@@ -1,5 +1,5 @@
 (function () {
-    console.log("Aether AI script starting...");
+    console.log("Aether AI script starting... (Multi-API support with fallback)");
 
     // ==================== LOCAL MODEL BRIDGE ====================
     let pendingCallbacks = {};
@@ -46,7 +46,25 @@
         }
     }
 
-    // ==================== GEMINI API CALL ====================
+    // ==================== MULTI-PROVIDER API CALL ====================
+    async function callAIAPI(prompt, apiKey) {
+        const key = apiKey.trim();
+        if (!key) throw new Error("No API key provided");
+
+        // Detect provider based on key prefix
+        if (key.startsWith("gsk_")) {
+            return await callGroqAPI(prompt, key);
+        } else if (key.startsWith("sk-")) {
+            return await callOpenAIAPI(prompt, key);
+        } else if (key.startsWith("AIza") || key.length >= 30) {
+            return await callGeminiAPI(prompt, key);
+        } else {
+            console.warn("Unknown API key format, trying Gemini...");
+            return await callGeminiAPI(prompt, key);
+        }
+    }
+
+    // ---- Gemini API ----
     async function callGeminiAPI(prompt, apiKey) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
         const requestBody = {
@@ -59,18 +77,91 @@
         });
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`API error (${response.status}): ${errorText}`);
+            throw new Error(`Gemini API error (${response.status}): ${errorText}`);
         }
         const data = await response.json();
         const candidates = data.candidates;
-        if (!candidates || candidates.length === 0) {
-            throw new Error('API returned no response');
-        }
+        if (!candidates || candidates.length === 0) throw new Error('Gemini: No response');
         const content = candidates[0].content;
-        if (!content || !content.parts || content.parts.length === 0) {
-            throw new Error('API response missing content');
-        }
+        if (!content || !content.parts || content.parts.length === 0) throw new Error('Gemini: Missing content');
         return content.parts[0].text;
+    }
+
+    // ---- Groq API (with model fallback) ----
+    const GROQ_MODELS = [
+        "llama-3.3-70b-versatile",  // primary (replaces decommissioned llama3-70b)
+        "llama-3.1-8b-instant",
+        "gemma2-9b-it",
+        "qwen-2.5-32b"
+    ];
+
+    async function callGroqAPI(prompt, apiKey) {
+        let lastError = null;
+
+        for (const model of GROQ_MODELS) {
+            try {
+                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: [{ role: "user", content: prompt }],
+                        temperature: 0.7
+                    })
+                });
+
+                if (!response.ok) {
+                    const errText = await response.text();
+                    const errorObj = JSON.parse(errText);
+                    // If model decommissioned or not found, try next model
+                    if (errorObj.error?.message?.toLowerCase().includes("decommissioned") ||
+                        errorObj.error?.message?.toLowerCase().includes("not found")) {
+                        console.warn(`Groq model ${model} decommissioned, trying next...`);
+                        continue;
+                    }
+                    throw new Error(`Groq API error (${response.status}): ${errText}`);
+                }
+
+                const data = await response.json();
+                if (!data.choices || data.choices.length === 0) throw new Error("Groq: No response");
+                return data.choices[0].message.content;
+            } catch (err) {
+                lastError = err;
+                // Continue to next model only if it's a model-related error
+                if (err.message.includes("decommissioned") || err.message.includes("not found")) {
+                    continue;
+                }
+                throw err; // other errors (rate limit, network) abort fallback
+            }
+        }
+        throw new Error(`All Groq models failed. Last error: ${lastError?.message || "Unknown"}`);
+    }
+
+    // ---- OpenAI API ----
+    async function callOpenAIAPI(prompt, apiKey) {
+        const url = "https://api.openai.com/v1/chat/completions";
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: "gpt-3.5-turbo",
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.7
+            })
+        });
+        if (!response.ok) {
+            const errText = await response.text();
+            throw new Error(`OpenAI API error (${response.status}): ${errText}`);
+        }
+        const data = await response.json();
+        if (!data.choices || data.choices.length === 0) throw new Error("OpenAI: No response");
+        return data.choices[0].message.content;
     }
 
     // ==================== DOM REFS ====================
@@ -282,26 +373,26 @@
         inputEl.value = ''; inputEl.style.height = 'auto';
         appendMessage('user', text); renderRecentChats();
         showTypingIndicator(true);
-        sendBtn.disabled = true; btnSend.disabled = true; btnSendWelcome.disabled = true;
+        sendBtn.disabled = true;
 
         let prompt = text;
         if (customInstructions.trim()) prompt = `[Instructions: ${customInstructions.trim()}]\n\nUser: ${text}`;
 
         const timeoutId = setTimeout(() => {
-            if (btnSend.disabled) {
+            if (sendBtn.disabled) {
                 showTypingIndicator(false);
                 appendMessage('ai', '⚠️ AI is taking too long. Please try again.');
-                btnSend.disabled = false; btnSendWelcome.disabled = false;
+                sendBtn.disabled = false;
             }
-        }, 30000);
+        }, 60000);
 
         try {
             let response;
             if (apiKey) {
                 try {
-                    response = await callGeminiAPI(prompt, apiKey);
+                    response = await callAIAPI(prompt, apiKey);
                 } catch (apiErr) {
-                    console.warn('Gemini API error:', apiErr);
+                    console.warn('Cloud API error:', apiErr);
                     if (modelReady && window.AndroidTFLite) {
                         showToast('API error, trying local model...');
                         response = await new Promise((resolve, reject) => {
@@ -327,7 +418,7 @@
             showTypingIndicator(false);
             appendMessage('ai', '⚠️ ' + (err.message || 'Unknown error'));
         } finally {
-            btnSend.disabled = false; btnSendWelcome.disabled = false;
+            sendBtn.disabled = false;
             saveCurrentConversation(false); renderRecentChats();
             if (activeInput === 'welcome') welcomeUserInput.focus(); else userInput.focus();
         }
