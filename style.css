@@ -76,11 +76,17 @@ a:active {
     outline: none;
 }
 
+html {
+    height: 100%;
+    width: 100%;
+}
+
 body {
     font-family: 'Google Sans', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
     background: var(--bg);
     color: var(--text);
     height: 100vh;
+    height: 100dvh; /* Fixes layout getting cut off by mobile browser toolbars */
     width: 100vw;
     overflow: hidden;
     transition: background 0.3s, color 0.3s;
@@ -176,6 +182,7 @@ body {
     display: flex;
     width: 100%;
     height: 100%;
+    min-height: 0; /* Flexbox stability */
     opacity: 0;
     transform: scale(0.99);
     transition: opacity 0.5s ease, transform 0.5s ease;
@@ -414,6 +421,7 @@ body {
     position: relative;
     background: var(--bg);
     min-width: 0;
+    min-height: 0; /* Prevents flex items from overflowing bounds */
     overflow: hidden;
 }
 
@@ -592,6 +600,7 @@ body {
     text-align: center;
     transition: opacity 0.3s;
     overflow-y: auto;
+    min-height: 0;
 }
 
 .welcome-logo {
@@ -666,6 +675,7 @@ body {
     flex-direction: column;
     gap: 16px;
     scroll-behavior: smooth;
+    min-height: 0; /* Ensures inner scroll works instead of expanding container */
 }
 
 .message-wrapper {
@@ -1125,9 +1135,13 @@ textarea {
     }
 
     /* Reset desktop top padding */
-    #chatArea,
+    #chatArea {
+        padding-top: 20px;
+    }
+
     #welcomeScreen {
         padding-top: 20px;
+        padding-bottom: 12vh; /* Moves the welcome content slightly upwards */
     }
 
     /* Smaller input buttons on mobile */
@@ -1140,7 +1154,7 @@ textarea {
         width: 18px;
         height: 18px;
     }
-
+ 
     #btnSend,
     #btnSendWelcome {
         width: 38px;
@@ -1154,8 +1168,6 @@ textarea {
 }
 
 @media (min-width: 769px) {
-    /* ... existing desktop rules ... */
-
     /* Reduce icon sizes on desktop to match mobile */
     .icon-btn {
         width: 34px;
