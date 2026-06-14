@@ -42,6 +42,6 @@ Aether AI now supports optional online AI providers through API keys.
 
 ✅ You can delete your API key from [Groq Console](https://console.groq.com/keys) when you no longer need it.
 
-## 📥 Download
+## 📥 Download for Android
 
 [![Download APK](https://img.shields.io/badge/Download-APK-brightgreen)](https://github.com/yogeshcoodes/offline-llm/releases/download/apk-file/app-debug.1.apk)
