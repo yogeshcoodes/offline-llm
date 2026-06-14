@@ -218,6 +218,8 @@ body {
     width: 280px;
     background: var(--sidebar-bg);
     border-right: 1px solid var(--border);
+    border-top-right-radius: 1rem;
+    border-bottom-right-radius: 1rem;
     display: flex;
     flex-direction: column;
     padding: 20px;
