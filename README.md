@@ -4,7 +4,7 @@ Aether AI is a fully offline, privacy-first AI assistant that runs directly on y
 
 ## Frontend Preview
 
-https://yogeshcoodes.github.io/offline-llm/
+[Open Frontend Preview](https://yogeshcoodes.github.io/offline-llm/)
 
 **Note:** This website only showcases the frontend interface. To use the AI assistant, download and install the Android APK.
 
@@ -43,5 +43,6 @@ Aether AI now supports optional online AI providers through API keys.
 ✅ You can delete your API key from [Groq Console](https://console.groq.com/keys) when you no longer need it.
 
 ## 📥 Download for Android
+
 
 [![Download APK](https://img.shields.io/badge/Download-APK-brightgreen)](https://github.com/yogeshcoodes/offline-llm/releases/download/apk-file/app-debug.1.apk)
