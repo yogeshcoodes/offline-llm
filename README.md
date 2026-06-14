@@ -40,7 +40,7 @@ Aether AI now supports optional online AI providers through API keys.
 
 ✅ For maximum privacy, use the built-in offline model.
 
-✅ You can delete your API key from [Groq Console](https://console.groq.com/keys) when you no longer need it for additional security.
+✅ You can delete your API key from [Groq Console](https://console.groq.com/keys) when you no longer need it.
 
 ## 📥 Download
 
