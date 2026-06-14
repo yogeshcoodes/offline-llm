@@ -191,7 +191,7 @@
                 <div class="welcome-input-container" id="welcomeInputContainer">
                     <div class="input-container">
                         <textarea id="welcomeUserInput" rows="1" placeholder="Message Aether AI..."></textarea>
-                        <button class="icon-btn" id="btnMicWelcome" title="Voice input (coming soon)">
+                        <button class="icon-btn" id="btnMicWelcome" title="Voice input">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
                                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
@@ -199,8 +199,13 @@
                                 <line x1="8" y1="23" x2="16" y2="23" />
                             </svg>
                         </button>
-                        <button class="icon-btn" id="btnAttachWelcome" title="Attach files (coming soon)">
-                           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus-icon lucide-plus"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                        <button class="icon-btn" id="btnAttachWelcome" title="Attach files">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round" class="lucide lucide-plus-icon lucide-plus">
+                                <path d="M5 12h14" />
+                                <path d="M12 5v14" />
+                            </svg>
                         </button>
                         <button class="icon-btn" id="btnSendWelcome" disabled>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -220,7 +225,7 @@
             <div class="input-container-wrapper" id="chatInputWrapper" style="display:none;">
                 <div class="input-container">
                     <textarea id="userInput" rows="1" placeholder="Message Aether AI..."></textarea>
-                    <button class="icon-btn" id="btnMic" title="Voice input (coming soon)">
+                    <button class="icon-btn" id="btnMic" title="Voice input">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
                             <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
@@ -228,12 +233,12 @@
                             <line x1="8" y1="23" x2="16" y2="23" />
                         </svg>
                     </button>
-                    <button class="icon-btn" id="btnAttach" title="Attach files (coming soon)">
+                    <button class="icon-btn" id="btnAttach" title="Attach files">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
                             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                            class="lucide lucide-paperclip-icon lucide-paperclip">
-                            <path
-                                d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551" />
+                            class="lucide lucide-plus-icon lucide-plus">
+                            <path d="M5 12h14" />
+                            <path d="M12 5v14" />
                         </svg>
                     </button>
                     <button class="icon-btn" id="btnSend" disabled>
@@ -291,8 +296,8 @@
     <!-- Confirm Clear Dialog -->
     <div class="modal-overlay hidden" id="confirmClearDialog">
         <div class="modal" id="confirmDialog">
-            <h3>Clear all messages?</h3>
-            <p style="color: var(--text-secondary);">This action cannot be undone.</p>
+            <h3 id="confirmDialogTitle">Clear all messages?</h3>
+            <p style="color: var(--text-secondary);" id="confirmDialogMessage">This action cannot be undone.</p>
             <div class="modal-buttons">
                 <button class="btn-secondary" id="confirmClearCancel">Cancel</button>
                 <button class="btn-primary" id="confirmClearOk">Clear</button>

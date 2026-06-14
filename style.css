@@ -100,7 +100,7 @@ body {
     background: var(--bg);
     color: var(--text);
     height: 100vh;
-    height: 100dvh; /* Fixes layout getting cut off by mobile browser toolbars */
+    height: 100dvh;
     width: 100vw;
     overflow: hidden;
     transition: background 0.3s, color 0.3s;
@@ -166,6 +166,7 @@ body {
     from {
         transform: rotate(0deg);
     }
+
     to {
         transform: rotate(360deg);
     }
@@ -175,6 +176,7 @@ body {
     from {
         opacity: 0;
     }
+
     to {
         opacity: 1;
     }
@@ -185,6 +187,7 @@ body {
         opacity: 0;
         transform: translateY(20px);
     }
+
     to {
         opacity: 1;
         transform: translateY(0);
@@ -196,7 +199,7 @@ body {
     display: flex;
     width: 100%;
     height: 100%;
-    min-height: 0; /* Flexbox stability */
+    min-height: 0;
     opacity: 0;
     transform: scale(0.99);
     transition: opacity 0.5s ease, transform 0.5s ease;
@@ -420,12 +423,19 @@ body {
     }
 }
 
+/* Sidebar overlay with blur */
 #sidebarOverlay {
     display: none;
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
     z-index: 15;
+}
+
+#sidebarOverlay.active {
+    display: block;
 }
 
 #main {
@@ -435,7 +445,7 @@ body {
     position: relative;
     background: var(--bg);
     min-width: 0;
-    min-height: 0; /* Prevents flex items from overflowing bounds */
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -560,7 +570,6 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    /* background: var(--bg); */
     padding-top: calc(12px + env(safe-area-inset-top));
     flex-shrink: 0;
 }
@@ -627,6 +636,7 @@ body {
     from {
         transform: rotate(0deg);
     }
+
     to {
         transform: rotate(360deg);
     }
@@ -689,7 +699,7 @@ body {
     flex-direction: column;
     gap: 16px;
     scroll-behavior: smooth;
-    min-height: 0; /* Ensures inner scroll works instead of expanding container */
+    min-height: 0;
 }
 
 .message-wrapper {
@@ -737,6 +747,8 @@ body {
     gap: 6px;
     margin-top: 6px;
     justify-content: flex-end;
+    flex-wrap: nowrap;
+    min-width: 0;
 }
 
 .ai-message .message-footer {
@@ -746,45 +758,54 @@ body {
 .message-time {
     font-size: 0.65rem;
     opacity: 0.6;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
-.copy-msg-btn {
+/* Action buttons container */
+.msg-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-top: 6px;
+}
+
+/* Copy & speak buttons */
+.copy-msg-btn,
+.speak-msg-btn {
     background: none;
     border: none;
     cursor: pointer;
     padding: 4px;
     border-radius: 4px;
     color: var(--text-secondary);
-    opacity: 0;
+    opacity: 0.7;
     transition: opacity 0.15s, color 0.15s;
-    margin-top: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
-.message-wrapper:hover .copy-msg-btn,
-.copy-msg-btn:focus-visible {
-    opacity: 0.7;
-}
-
-.copy-msg-btn:hover {
+.copy-msg-btn:hover,
+.speak-msg-btn:hover {
     opacity: 1 !important;
     color: var(--primary);
 }
 
-.copy-msg-btn svg {
+.copy-msg-btn svg,
+.speak-msg-btn svg {
     width: 14px;
     height: 14px;
     stroke: currentColor;
 }
 
-.user .copy-msg-btn {
-    align-self: flex-end;
+.user .msg-actions {
+    justify-content: flex-end;
 }
 
-.ai .copy-msg-btn {
-    align-self: flex-start;
+.ai .msg-actions {
+    justify-content: flex-start;
 }
 
 .typing-indicator {
@@ -815,12 +836,14 @@ body {
 }
 
 @keyframes typingBounce {
+
     0%,
     80%,
     100% {
         transform: scale(0.6);
         opacity: 0.4;
     }
+
     40% {
         transform: scale(1);
         opacity: 1;
@@ -834,10 +857,6 @@ body {
     flex-shrink: 0;
 }
 
-/* * ==========================================
- * LAYOUT FIX FOR INPUT CONTAINER & BUTTONS
- * ==========================================
- */
 .input-container {
     display: flex;
     align-items: flex-end;
@@ -848,9 +867,9 @@ body {
     padding: 8px 8px 8px 20px;
     transition: border-color 0.2s;
     box-shadow: var(--shadow);
-    flex-wrap: wrap; 
-    justify-content: flex-end; 
-    /* position: fixed; */
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    position: relative;
 }
 
 .input-container:focus-within {
@@ -870,8 +889,7 @@ textarea {
     max-height: 120px;
     padding: 8px 0;
     line-height: 1.4;
-    /* Force textarea to be the first item in the flexbox */
-    order: 1; 
+    order: 1;
 }
 
 .icon-btn {
@@ -894,9 +912,6 @@ textarea {
     color: var(--primary);
 }
 
-/* * Flex "order" safely swaps the HTML elements visually.
- * The margin-right: auto pushes everything coming after it to the far right.
- */
 #btnAttach,
 #btnAttachWelcome {
     order: 2;
@@ -922,7 +937,6 @@ textarea {
     opacity: 0.4;
     pointer-events: none;
 }
-/* ========================================== */
 
 #toast {
     position: fixed;
@@ -1086,7 +1100,7 @@ textarea {
     color: white;
 }
 
-/* ---------- Desktop & Layout Overrides ---------- */
+/* Desktop */
 @media (min-width: 769px) {
     .desktop-sidebar-toggle {
         display: flex;
@@ -1098,14 +1112,13 @@ textarea {
         display: flex;
     }
 
-    /* Push content below top action buttons */
     #chatArea,
     #welcomeScreen {
         padding-top: 90px;
     }
 }
 
-/* ---------- Mobile responsive adjustments ---------- */
+/* Mobile */
 @media (max-width: 768px) {
     #sidebar {
         position: fixed;
@@ -1121,10 +1134,6 @@ textarea {
 
     #sidebar.open {
         transform: translateX(0);
-    }
-
-    #sidebarOverlay.active {
-        display: block;
     }
 
     .mobile-header {
@@ -1149,17 +1158,15 @@ textarea {
         display: none !important;
     }
 
-    /* Reset desktop top padding */
     #chatArea {
         padding-top: 20px;
     }
 
     #welcomeScreen {
         padding-top: 20px;
-        padding-bottom: 12vh; /* Moves the welcome content slightly upwards */
+        padding-bottom: 12vh;
     }
 
-    /* Smaller input buttons on mobile */
     .icon-btn {
         width: 34px;
         height: 34px;
@@ -1169,7 +1176,7 @@ textarea {
         width: 18px;
         height: 18px;
     }
- 
+
     #btnSend,
     #btnSendWelcome {
         width: 38px;
@@ -1183,18 +1190,87 @@ textarea {
 }
 
 @media (min-width: 769px) {
-    /* Reduce icon sizes on desktop to match mobile */
     .icon-btn {
         width: 34px;
         height: 34px;
     }
+
     .icon-btn svg {
         width: 18px;
         height: 18px;
     }
+
     #btnSend,
     #btnSendWelcome {
         width: 38px;
         height: 38px;
     }
+}
+
+/* Attach popup */
+.attach-popup {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    padding: 6px;
+    min-width: 180px;
+    z-index: 35;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.attach-popup.hidden {
+    display: none;
+}
+
+.attach-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-align: left;
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+.attach-option:hover {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
+.attach-option svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    flex-shrink: 0;
+}
+
+/* Mic active state */
+.icon-btn.mic-active {
+    background: var(--primary);
+    color: white;
+}
+
+.icon-btn.mic-active:hover {
+    background: var(--primary);
+    color: white;
+}
+
+/* Speaker active */
+.speak-msg-btn.speaking {
+    color: var(--primary);
+    opacity: 1;
 }
