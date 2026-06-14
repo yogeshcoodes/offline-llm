@@ -889,7 +889,7 @@
             if (window.AndroidTFLite) {
                 modelReady = true;
                 console.log("Bridge initialized.");
-                if (!apiKey) showToast('Local Qwen3 model ready');
+                if (!apiKey) showToast('Local model ready');
                 else showToast('API key set – using cloud model');
             } else {
                 if (!apiKey) showToast('Running in browser – model not available. Set API key in Settings.');
