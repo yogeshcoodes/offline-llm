@@ -193,24 +193,24 @@
     let sendOnEnter = true;
     let activeInput = 'welcome';
     let currentAccent = localStorage.getItem('accent') || '#2A7CCC';
-    let selectedAccent = currentAccent;   // for settings preview
+    let selectedAccent = currentAccent;
     let allConversations = [];
     let activeConversationId = null;
     let customInstructions = localStorage.getItem('customInstructions') || '';
     let apiKey = localStorage.getItem('apiKey') || '';
 
+    // Apply accent to body (overrides .dark if present)
     function applyAccent(color) {
         currentAccent = color;
-        document.documentElement.style.setProperty('--primary', color);
-        document.documentElement.style.setProperty('--message-user-bg', color);
+        document.body.style.setProperty('--primary', color);
+        document.body.style.setProperty('--message-user-bg', color);
         localStorage.setItem('accent', color);
-        // update active circle
         accentCircles.forEach(c => c.classList.toggle('active', c.getAttribute('data-color') === color));
         selectedAccent = color;
     }
     applyAccent(currentAccent);
 
-    // Accent circle click only selects, doesn't apply
+    // Accent circle selection
     accentCircles.forEach(c => {
         c.addEventListener('click', () => {
             selectedAccent = c.getAttribute('data-color');
@@ -455,7 +455,7 @@
         URL.revokeObjectURL(url); showToast('Chat exported');
     }
 
-    // Delegate clicks for copy and speak buttons
+    // Copy & Speak
     chatArea.addEventListener('click', (e) => {
         const copyBtn = e.target.closest('.copy-msg-btn');
         const speakBtn = e.target.closest('.speak-msg-btn');
@@ -544,7 +544,7 @@
 
     searchInput.addEventListener('input', renderRecentChats);
 
-    // Sidebar open/close helpers
+    // Sidebar
     function openSidebar() { sidebar.classList.add('open'); overlay.classList.add('active'); }
     function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('active'); }
 
@@ -552,25 +552,19 @@
     overlay.addEventListener('click', closeSidebar);
     desktopSidebarToggle.addEventListener('click', () => document.body.classList.toggle('sidebar-collapsed'));
 
-    // Swipe to close sidebar on mobile
     let touchStartX = 0;
-    sidebar.addEventListener('touchstart', (e) => {
-        touchStartX = e.changedTouches[0].screenX;
-    }, { passive: true });
+    sidebar.addEventListener('touchstart', (e) => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });
     sidebar.addEventListener('touchend', (e) => {
         if (!sidebar.classList.contains('open')) return;
         const deltaX = e.changedTouches[0].screenX - touchStartX;
-        if (deltaX < -50) { // swiped left
-            closeSidebar();
-        }
+        if (deltaX < -50) { closeSidebar(); }
     });
 
-    // Settings button
+    // Settings
     document.getElementById('btnSettings').addEventListener('click', () => {
         sendOnEnterCheckbox.checked = sendOnEnter;
         customInstructionsInput.value = customInstructions;
         apiKeyInput.value = apiKey;
-        // sync selected accent with current
         selectedAccent = currentAccent;
         accentCircles.forEach(c => c.classList.toggle('active', c.getAttribute('data-color') === selectedAccent));
         settingsModalOverlay.classList.remove('hidden');
@@ -581,7 +575,6 @@
         saveCustomInstructions(customInstructionsInput.value.trim());
         apiKey = apiKeyInput.value.trim();
         localStorage.setItem('apiKey', apiKey);
-        // Apply the selected accent
         if (selectedAccent !== currentAccent) {
             applyAccent(selectedAccent);
         }
@@ -589,6 +582,24 @@
         settingsModalOverlay.classList.add('hidden');
     });
     settingsModalOverlay.addEventListener('click', (e) => { if (e.target === settingsModalOverlay) settingsModalOverlay.classList.add('hidden'); });
+
+    // ==================== User Account Modal ====================
+    const userAccountModal = document.getElementById('userAccountModal');
+    const btnUserAccount = document.getElementById('btnUserAccount');
+    const btnUserAccountClose = document.getElementById('btnUserAccountClose');
+    const userOptionBtns = document.querySelectorAll('.user-option-btn');
+
+    btnUserAccount.addEventListener('click', () => { userAccountModal.classList.remove('hidden'); });
+    btnUserAccountClose.addEventListener('click', () => { userAccountModal.classList.add('hidden'); });
+    userAccountModal.addEventListener('click', (e) => { if (e.target === userAccountModal) userAccountModal.classList.add('hidden'); });
+
+    userOptionBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const provider = btn.getAttribute('data-provider');
+            showToast(`${provider === 'google' ? 'Google' : provider === 'facebook' ? 'Facebook' : 'Phone'} login coming soon!`);
+            userAccountModal.classList.add('hidden');
+        });
+    });
 
     // ==================== Attach popup ====================
     function createAttachPopup(attachBtn) {
@@ -599,11 +610,9 @@
         const cameraBtn = document.createElement('button');
         cameraBtn.className = 'attach-option';
         cameraBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-camera-icon lucide-camera"><path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"/><circle cx="12" cy="13" r="3"/></svg> Camera`;
-
         const photosBtn = document.createElement('button');
         photosBtn.className = 'attach-option';
         photosBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-image-icon lucide-image"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg> Photos`;
-
         const filesBtn = document.createElement('button');
         filesBtn.className = 'attach-option';
         filesBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-icon lucide-file"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/></svg> Files`;
@@ -637,34 +646,24 @@
         cameraBtn.addEventListener('click', () => {
             popup.classList.add('hidden');
             const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.capture = 'environment';
-            input.setAttribute('data-type', 'photo');
-            input.style.display = 'none';
+            input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
+            input.setAttribute('data-type', 'photo'); input.style.display = 'none';
             document.body.appendChild(input);
             handleFileInput(input);
         });
-
         photosBtn.addEventListener('click', () => {
             popup.classList.add('hidden');
             const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = 'image/*';
-            input.setAttribute('data-type', 'photo');
-            input.style.display = 'none';
+            input.type = 'file'; input.accept = 'image/*';
+            input.setAttribute('data-type', 'photo'); input.style.display = 'none';
             document.body.appendChild(input);
             handleFileInput(input);
         });
-
         filesBtn.addEventListener('click', () => {
             popup.classList.add('hidden');
             const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '*/*';
-            input.multiple = true;
-            input.setAttribute('data-type', 'file');
-            input.style.display = 'none';
+            input.type = 'file'; input.accept = '*/*'; input.multiple = true;
+            input.setAttribute('data-type', 'file'); input.style.display = 'none';
             document.body.appendChild(input);
             handleFileInput(input);
         });
@@ -678,22 +677,11 @@
         popup.classList.toggle('hidden');
     }
 
-    document.getElementById('btnAttach').addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleAttachPopup(document.getElementById('btnAttach'));
-    });
-    document.getElementById('btnAttachWelcome').addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleAttachPopup(document.getElementById('btnAttachWelcome'));
-    });
+    document.getElementById('btnAttach').addEventListener('click', (e) => { e.stopPropagation(); toggleAttachPopup(document.getElementById('btnAttach')); });
+    document.getElementById('btnAttachWelcome').addEventListener('click', (e) => { e.stopPropagation(); toggleAttachPopup(document.getElementById('btnAttachWelcome')); });
+    document.addEventListener('click', (e) => { if (!e.target.closest('.attach-popup') && !e.target.closest('.icon-btn')) { document.querySelectorAll('.attach-popup').forEach(p => p.classList.add('hidden')); } });
 
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.attach-popup') && !e.target.closest('.icon-btn')) {
-            document.querySelectorAll('.attach-popup').forEach(p => p.classList.add('hidden'));
-        }
-    });
-
-    // ==================== Mic with permissions ====================
+    // ==================== Mic ====================
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
     let isListening = false;
@@ -703,83 +691,45 @@
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             stream.getTracks().forEach(track => track.stop());
             return true;
-        } catch (err) {
-            console.warn('Microphone permission denied:', err);
-            return false;
-        }
+        } catch (err) { console.warn('Microphone permission denied:', err); return false; }
     }
 
     function initSpeechRecognition() {
-        if (!SpeechRecognition) {
-            showToast('Voice input not supported in this browser');
-            return null;
-        }
+        if (!SpeechRecognition) { showToast('Voice input not supported'); return null; }
         const rec = new SpeechRecognition();
-        rec.continuous = false;
-        rec.interimResults = true;
-        rec.lang = 'en-US';
+        rec.continuous = false; rec.interimResults = true; rec.lang = 'en-US';
         return rec;
     }
 
     async function startListening(micBtn) {
-        if (isListening) {
-            stopListening();
-            return;
-        }
-
+        if (isListening) { stopListening(); return; }
         const hasPermission = await requestMicPermission();
-        if (!hasPermission) {
-            showToast('Microphone permission denied. Please allow microphone access in site settings.');
-            return;
-        }
-
+        if (!hasPermission) { showToast('Microphone permission denied.'); return; }
         if (!recognition) recognition = initSpeechRecognition();
         if (!recognition) return;
-
         isListening = true;
         micBtn.classList.add('mic-active');
         showToast('Listening...');
 
         recognition.onresult = (event) => {
-            let finalTranscript = '';
-            let interimTranscript = '';
+            let finalTranscript = '', interimTranscript = '';
             for (let i = event.resultIndex; i < event.results.length; i++) {
                 const result = event.results[i];
-                if (result.isFinal) {
-                    finalTranscript += result[0].transcript;
-                } else {
-                    interimTranscript += result[0].transcript;
-                }
+                if (result.isFinal) finalTranscript += result[0].transcript;
+                else interimTranscript += result[0].transcript;
             }
             const activeEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
-            if (finalTranscript) {
-                activeEl.value = finalTranscript;
-            } else if (interimTranscript) {
-                activeEl.value = interimTranscript;
-            }
+            if (finalTranscript) activeEl.value = finalTranscript;
+            else if (interimTranscript) activeEl.value = interimTranscript;
             activeEl.dispatchEvent(new Event('input'));
         };
-
         recognition.onerror = (event) => {
-            console.error('Speech recognition error:', event.error);
-            if (event.error === 'not-allowed') {
-                showToast('Microphone not allowed. Please allow in browser settings.');
-            } else {
-                showToast('Voice error: ' + event.error);
-            }
+            console.error('Speech error:', event.error);
+            showToast('Voice error: ' + event.error);
             stopListening();
         };
-
-        recognition.onend = () => {
-            stopListening();
-        };
-
-        try {
-            recognition.start();
-        } catch (err) {
-            stopListening();
-            showToast('Could not start voice recognition.');
-        }
+        recognition.onend = () => { stopListening(); };
+        try { recognition.start(); } catch (err) { stopListening(); showToast('Could not start voice recognition.'); }
     }
 
     function stopListening() {
@@ -793,14 +743,13 @@
     document.getElementById('btnMic').addEventListener('click', () => startListening(document.getElementById('btnMic')));
     document.getElementById('btnMicWelcome').addEventListener('click', () => startListening(document.getElementById('btnMicWelcome')));
 
-    // ==================== Clear cache in settings ====================
+    // Clear cache
     const settingsModal = document.querySelector('#settingsModalOverlay .modal');
     if (settingsModal) {
         const clearCacheBtn = document.createElement('button');
         clearCacheBtn.className = 'btn-secondary';
         clearCacheBtn.textContent = 'Clear Cache';
-        clearCacheBtn.style.marginTop = '16px';
-        clearCacheBtn.style.width = '100%';
+        clearCacheBtn.style.marginTop = '16px'; clearCacheBtn.style.width = '100%';
         clearCacheBtn.addEventListener('click', () => {
             const confirmTitle = document.getElementById('confirmDialogTitle');
             const confirmMsg = document.getElementById('confirmDialogMessage');
@@ -811,39 +760,22 @@
             confirmClearDialog.classList.remove('hidden');
 
             const onCancel = () => {
-                confirmTitle.textContent = origTitle;
-                confirmMsg.textContent = origMsg;
+                confirmTitle.textContent = origTitle; confirmMsg.textContent = origMsg;
                 confirmClearDialog.classList.add('hidden');
                 document.getElementById('confirmClearCancel').removeEventListener('click', onCancel);
                 document.getElementById('confirmClearOk').removeEventListener('click', onConfirm);
             };
             const onConfirm = () => {
                 const keepKeys = ['theme', 'accent', 'apiKey'];
-                const allKeys = Object.keys(localStorage);
-                allKeys.forEach(key => {
-                    if (!keepKeys.includes(key)) {
-                        localStorage.removeItem(key);
-                    }
-                });
-                allConversations = [];
-                activeConversationId = null;
-                currentConversation = [];
-                customInstructions = '';
-                customInstructionsInput.value = '';
-                apiKeyInput.value = localStorage.getItem('apiKey') || '';
-                apiKey = localStorage.getItem('apiKey') || '';
-
-                chatArea.innerHTML = '';
-                typingIndicatorEl = null;
-                welcomeScreen.style.display = 'flex';
-                chatArea.style.display = 'none';
-                welcomeUserInput.value = '';
-                userInput.value = '';
-                setActiveInput('welcome');
-                renderRecentChats();
-
-                confirmTitle.textContent = origTitle;
-                confirmMsg.textContent = origMsg;
+                Object.keys(localStorage).forEach(key => { if (!keepKeys.includes(key)) localStorage.removeItem(key); });
+                allConversations = []; activeConversationId = null; currentConversation = [];
+                customInstructions = ''; customInstructionsInput.value = '';
+                apiKeyInput.value = localStorage.getItem('apiKey') || ''; apiKey = localStorage.getItem('apiKey') || '';
+                chatArea.innerHTML = ''; typingIndicatorEl = null;
+                welcomeScreen.style.display = 'flex'; chatArea.style.display = 'none';
+                welcomeUserInput.value = ''; userInput.value = '';
+                setActiveInput('welcome'); renderRecentChats();
+                confirmTitle.textContent = origTitle; confirmMsg.textContent = origMsg;
                 confirmClearDialog.classList.add('hidden');
                 showToast('Cache cleared');
                 document.getElementById('confirmClearCancel').removeEventListener('click', onCancel);
@@ -852,34 +784,27 @@
             document.getElementById('confirmClearCancel').addEventListener('click', onCancel);
             document.getElementById('confirmClearOk').addEventListener('click', onConfirm);
         });
-
         const modalButtons = settingsModal.querySelector('.modal-buttons');
-        if (modalButtons) {
-            modalButtons.parentNode.insertBefore(clearCacheBtn, modalButtons);
-        } else {
-            settingsModal.appendChild(clearCacheBtn);
-        }
+        if (modalButtons) { modalButtons.parentNode.insertBefore(clearCacheBtn, modalButtons); }
+        else { settingsModal.appendChild(clearCacheBtn); }
     }
 
-    // ==================== Input focus scroll ====================
+    // Input focus scroll
     function scrollInputIntoView(e) {
         setTimeout(() => {
             const wrapper = e.target.closest('.input-container-wrapper') || e.target.closest('.welcome-input-container');
-            if (wrapper) {
-                wrapper.scrollIntoView({ block: 'end', behavior: 'smooth' });
-            }
+            if (wrapper) wrapper.scrollIntoView({ block: 'end', behavior: 'smooth' });
         }, 300);
     }
     welcomeUserInput.addEventListener('focus', scrollInputIntoView);
     userInput.addEventListener('focus', scrollInputIntoView);
 
-    // ==================== SPLASH & INIT ====================
+    // Splash & init
     function hideSplash() {
         splashOverlay.classList.add('hidden');
         setTimeout(() => { splashOverlay.style.display = 'none'; }, 500);
         app.classList.add('visible');
     }
-
     async function startApp() {
         console.log("App Init: Checking bridge...");
         try {
@@ -888,12 +813,9 @@
             await waitForBridge();
             if (window.AndroidTFLite) {
                 modelReady = true;
-                console.log("Bridge initialized.");
-                if (!apiKey) showToast('Local model ready');
-                else showToast('API key set – using cloud model');
+                showToast(apiKey ? 'API key set – using cloud model' : 'Local model ready');
             } else {
-                if (!apiKey) showToast('Running in browser – model not available. Set API key in Settings.');
-                else showToast('API key set – using cloud model');
+                showToast(apiKey ? 'API key set – using cloud model' : 'Running in browser – set API key in Settings.');
             }
         } catch (e) {
             console.error("Init error:", e);
@@ -903,14 +825,8 @@
         welcomeUserInput.focus();
     }
 
-    if (splashLogoImg) {
-        splashLogoImg.src = (savedTheme === 'dark') ? 'logo-white.png' : 'logo-black.png';
-    }
+    if (splashLogoImg) splashLogoImg.src = (savedTheme === 'dark') ? 'logo-white.png' : 'logo-black.png';
 
-    setTimeout(() => {
-        hideSplash();
-        startApp();
-    }, 2500);
-
+    setTimeout(() => { hideSplash(); startApp(); }, 2500);
     setActiveInput('welcome');
 })();
