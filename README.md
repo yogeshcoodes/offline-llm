@@ -45,4 +45,4 @@ Aether AI now supports optional online AI providers through API keys.
 ## 📥 Download for Android
 
 
-[![Download APK](https://img.shields.io/badge/Download-APK-brightgreen)](https://github.com/yogeshcoodes/offline-llm/releases/download/apk-file/app-debug.1.apk)
+[![Download APK](https://img.shields.io/badge/Download-APK-brightgreen)](https://github.com/yogeshcoodes/offline-llm/releases/download/app/app-debug.apk)
