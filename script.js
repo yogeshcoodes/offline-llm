@@ -46,26 +46,35 @@
         }
     }
 
-    // ==================== MULTI-PROVIDER API CALL ====================
-    async function callAIAPI(prompt, apiKey) {
+    // ==================== MULTI-PROVIDER API CALL (with context) ====================
+    async function callAIAPI(messages, apiKey, systemInstruction) {
         const key = apiKey.trim();
         if (!key) throw new Error("No API key provided");
 
         if (key.startsWith("gsk_")) {
-            return await callGroqAPI(prompt, key);
+            return await callGroqAPI(messages, key, systemInstruction);
         } else if (key.startsWith("sk-")) {
-            return await callOpenAIAPI(prompt, key);
+            return await callOpenAIAPI(messages, key, systemInstruction);
         } else if (key.startsWith("AIza") || key.length >= 30) {
-            return await callGeminiAPI(prompt, key);
+            return await callGeminiAPI(messages, key, systemInstruction);
         } else {
             console.warn("Unknown API key format, trying Gemini...");
-            return await callGeminiAPI(prompt, key);
+            return await callGeminiAPI(messages, key, systemInstruction);
         }
     }
 
-    async function callGeminiAPI(prompt, apiKey) {
+    // Gemini API with full conversation
+    async function callGeminiAPI(messages, apiKey, systemInstruction) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
-        const requestBody = { contents: [{ parts: [{ text: prompt }] }] };
+        const contents = [];
+        for (const msg of messages) {
+            const role = msg.role === 'user' ? 'user' : 'model';
+            contents.push({ role: role, parts: [{ text: msg.content }] });
+        }
+        const requestBody = { contents: contents };
+        if (systemInstruction) {
+            requestBody.system_instruction = { parts: [{ text: systemInstruction }] };
+        }
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -90,7 +99,12 @@
         "qwen-2.5-32b"
     ];
 
-    async function callGroqAPI(prompt, apiKey) {
+    async function callGroqAPI(messages, apiKey, systemInstruction) {
+        let fullMessages = [];
+        if (systemInstruction) {
+            fullMessages.push({ role: "system", content: systemInstruction });
+        }
+        fullMessages = fullMessages.concat(messages);
         let lastError = null;
         for (const model of GROQ_MODELS) {
             try {
@@ -102,7 +116,7 @@
                     },
                     body: JSON.stringify({
                         model: model,
-                        messages: [{ role: "user", content: prompt }],
+                        messages: fullMessages,
                         temperature: 0.7
                     })
                 });
@@ -128,8 +142,13 @@
         throw new Error(`All Groq models failed. Last error: ${lastError?.message || "Unknown"}`);
     }
 
-    async function callOpenAIAPI(prompt, apiKey) {
+    async function callOpenAIAPI(messages, apiKey, systemInstruction) {
         const url = "https://api.openai.com/v1/chat/completions";
+        let fullMessages = [];
+        if (systemInstruction) {
+            fullMessages.push({ role: "system", content: systemInstruction });
+        }
+        fullMessages = fullMessages.concat(messages);
         const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -138,7 +157,7 @@
             },
             body: JSON.stringify({
                 model: "gpt-3.5-turbo",
-                messages: [{ role: "user", content: prompt }],
+                messages: fullMessages,
                 temperature: 0.7
             })
         });
@@ -199,7 +218,27 @@
     let customInstructions = localStorage.getItem('customInstructions') || '';
     let apiKey = localStorage.getItem('apiKey') || '';
 
-    // Apply accent to body (overrides .dark if present)
+    // Persistence helpers
+    function persistData() {
+        localStorage.setItem('allConversations', JSON.stringify(allConversations));
+        localStorage.setItem('activeConversationId', activeConversationId || '');
+    }
+
+    function loadPersistedData() {
+        const savedConv = localStorage.getItem('allConversations');
+        if (savedConv) {
+            try {
+                allConversations = JSON.parse(savedConv);
+            } catch (e) { allConversations = []; }
+        }
+        const savedActiveId = localStorage.getItem('activeConversationId');
+        if (savedActiveId && allConversations.find(c => c.id === savedActiveId)) {
+            activeConversationId = savedActiveId;
+        }
+        renderRecentChats();
+    }
+
+    // Apply accent
     function applyAccent(color) {
         currentAccent = color;
         document.body.style.setProperty('--primary', color);
@@ -210,7 +249,6 @@
     }
     applyAccent(currentAccent);
 
-    // Accent circle selection
     accentCircles.forEach(c => {
         c.addEventListener('click', () => {
             selectedAccent = c.getAttribute('data-color');
@@ -233,6 +271,25 @@
             .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, c => c);
     }
 
+    // Simple markdown to HTML
+    function simpleMarkdown(text) {
+        if (!text) return '';
+        let html = escapeHtml(text);
+        // Code blocks (```)
+        html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+        // Inline code
+        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+        // Bold and italic
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        // Paragraphs
+        html = html.replace(/\n\n/g, '</p><p>');
+        html = '<p>' + html.replace(/\n/g, '<br>') + '</p>';
+        // Clean empty paragraphs
+        html = html.replace(/<p><\/p>/g, '');
+        return html;
+    }
+
     function appendMessage(role, content) {
         if (welcomeScreen.style.display !== 'none') {
             welcomeScreen.style.display = 'none';
@@ -243,9 +300,10 @@
         wrapper.className = `message-wrapper ${role === 'user' ? 'user' : 'ai'}`;
         wrapper.setAttribute('data-content', content);
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const formattedContent = role === 'ai' ? simpleMarkdown(content) : escapeHtml(content);
         wrapper.innerHTML = `
             <div class="message ${role === 'user' ? 'user-message' : 'ai-message'}">
-                <div class="message-text">${escapeHtml(content)}</div>
+                <div class="message-text">${formattedContent}</div>
                 <div class="message-footer"><span class="message-time">${time}</span></div>
             </div>
             <div class="msg-actions">
@@ -263,6 +321,7 @@
 
         if (role === 'user' && !activeConversationId && currentConversation.filter(m => m.role === 'user').length === 1) saveCurrentConversation(true);
         if (role === 'user' && activeConversationId && currentConversation.filter(m => m.role === 'user').length === 1) updateConversationTitle(activeConversationId, content);
+        persistData();
     }
 
     function showTypingIndicator(show) {
@@ -294,11 +353,12 @@
         if (idx >= 0) allConversations[idx] = conv; else allConversations.unshift(conv);
         if (createNew || !activeConversationId) activeConversationId = id;
         renderRecentChats();
+        persistData();
     }
 
     function updateConversationTitle(convId, content) {
         const conv = allConversations.find(c => c.id === convId);
-        if (conv) { conv.title = generateChatTitle(content); conv.timestamp = Date.now(); renderRecentChats(); }
+        if (conv) { conv.title = generateChatTitle(content); conv.timestamp = Date.now(); renderRecentChats(); persistData(); }
     }
 
     function loadConversation(convId) {
@@ -312,9 +372,10 @@
             wrapper.className = `message-wrapper ${msg.role === 'user' ? 'user' : 'ai'}`;
             wrapper.setAttribute('data-content', msg.content);
             const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const formattedContent = msg.role === 'ai' ? simpleMarkdown(msg.content) : escapeHtml(msg.content);
             wrapper.innerHTML = `
                 <div class="message ${msg.role === 'user' ? 'user-message' : 'ai-message'}">
-                    <div class="message-text">${escapeHtml(msg.content)}</div>
+                    <div class="message-text">${formattedContent}</div>
                     <div class="message-footer"><span class="message-time">${time}</span></div>
                 </div>
                 <div class="msg-actions">
@@ -326,6 +387,7 @@
         });
         welcomeScreen.style.display = 'none'; chatArea.style.display = 'flex';
         setActiveInput('chat'); chatArea.scrollTop = chatArea.scrollHeight; renderRecentChats();
+        localStorage.setItem('activeConversationId', activeConversationId);
     }
 
     function deleteConversation(convId, e) {
@@ -335,8 +397,10 @@
             activeConversationId = null; currentConversation = []; chatArea.innerHTML = ''; typingIndicatorEl = null;
             welcomeScreen.style.display = 'flex'; chatArea.style.display = 'none';
             welcomeUserInput.value = ''; userInput.value = ''; setActiveInput('welcome');
+            localStorage.removeItem('activeConversationId');
         }
         renderRecentChats(); showToast('Chat deleted');
+        persistData();
     }
 
     function renderRecentChats() {
@@ -365,6 +429,20 @@
         });
     }
 
+    // Build full conversation prompt for local model
+    function buildLocalPrompt(newUserMessage) {
+        const systemPrompt = customInstructions.trim()
+            ? `System: ${customInstructions.trim()}\n`
+            : 'System: You are Aether AI, a smart assistant. Answer directly and helpfully, never invent questions or add unrelated information.\n';
+        let history = '';
+        for (const msg of currentConversation) {
+            if (msg.role === 'user') history += `User: ${msg.content}\n`;
+            else if (msg.role === 'ai') history += `Assistant: ${msg.content}\n`;
+        }
+        history += `User: ${newUserMessage}\nAssistant: `;
+        return systemPrompt + history;
+    }
+
     async function sendMessage() {
         const inputEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
         const sendBtn = activeInput === 'welcome' ? btnSendWelcome : btnSend;
@@ -376,12 +454,9 @@
         }
 
         inputEl.value = ''; inputEl.style.height = 'auto';
-        appendMessage('user', text); renderRecentChats();
+        appendMessage('user', text);
         showTypingIndicator(true);
         sendBtn.disabled = true;
-
-        let prompt = text;
-        if (customInstructions.trim()) prompt = `[Instructions: ${customInstructions.trim()}]\n\nUser: ${text}`;
 
         const timeoutId = setTimeout(() => {
             if (sendBtn.disabled) {
@@ -394,14 +469,16 @@
         try {
             let response;
             if (apiKey) {
+                const messages = currentConversation.map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }));
+                const systemInstruction = customInstructions.trim() || null;
                 try {
-                    response = await callAIAPI(prompt, apiKey);
+                    response = await callAIAPI(messages, apiKey, systemInstruction);
                 } catch (apiErr) {
                     console.warn('Cloud API error:', apiErr);
                     if (modelReady && window.AndroidTFLite) {
                         showToast('API error, trying local model...');
                         response = await new Promise((resolve, reject) => {
-                            askLocalLLM(prompt, resolve, reject);
+                            askLocalLLM(buildLocalPrompt(text), resolve, reject);
                         });
                     } else {
                         throw new Error(`API call failed: ${apiErr.message}`);
@@ -410,7 +487,7 @@
             } else {
                 if (!modelReady || !window.AndroidTFLite) throw new Error('Local model not ready');
                 response = await new Promise((resolve, reject) => {
-                    askLocalLLM(prompt, resolve, reject);
+                    askLocalLLM(buildLocalPrompt(text), resolve, reject);
                 });
             }
             clearTimeout(timeoutId);
@@ -422,7 +499,8 @@
             appendMessage('ai', '⚠️ ' + (err.message || 'Unknown error'));
         } finally {
             sendBtn.disabled = false;
-            saveCurrentConversation(false); renderRecentChats();
+            saveCurrentConversation(false);
+            renderRecentChats();
             if (activeInput === 'welcome') welcomeUserInput.focus(); else userInput.focus();
         }
     }
@@ -433,6 +511,7 @@
         welcomeScreen.style.display = 'flex'; chatArea.style.display = 'none';
         welcomeUserInput.value = ''; userInput.value = ''; setActiveInput('welcome');
         renderRecentChats();
+        localStorage.removeItem('activeConversationId');
         if (window.AndroidTFLite && typeof window.AndroidTFLite.resetChat === 'function') window.AndroidTFLite.resetChat();
     }
 
@@ -443,6 +522,7 @@
         welcomeScreen.style.display = 'flex'; chatArea.style.display = 'none';
         welcomeUserInput.value = ''; userInput.value = ''; setActiveInput('welcome');
         renderRecentChats();
+        persistData();
         if (window.AndroidTFLite && typeof window.AndroidTFLite.resetChat === 'function') window.AndroidTFLite.resetChat();
     }
 
@@ -467,6 +547,11 @@
         if (speakBtn) {
             const wrapper = speakBtn.closest('.message-wrapper');
             const content = wrapper?.getAttribute('data-content') || '';
+            // Piper TTS hook: if native Piper bridge is available, use it
+            if (window.PiperTTS && typeof window.PiperTTS.speak === 'function') {
+                window.PiperTTS.speak(content);
+                return;
+            }
             if (window.speechSynthesis) {
                 window.speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(content);
@@ -775,6 +860,7 @@
                 welcomeScreen.style.display = 'flex'; chatArea.style.display = 'none';
                 welcomeUserInput.value = ''; userInput.value = '';
                 setActiveInput('welcome'); renderRecentChats();
+                persistData();
                 confirmTitle.textContent = origTitle; confirmMsg.textContent = origMsg;
                 confirmClearDialog.classList.add('hidden');
                 showToast('Cache cleared');
@@ -807,6 +893,14 @@
     }
     async function startApp() {
         console.log("App Init: Checking bridge...");
+        loadPersistedData();
+        // If there was a persisted active conversation, load it
+        if (activeConversationId) {
+            const conv = allConversations.find(c => c.id === activeConversationId);
+            if (conv) {
+                loadConversation(activeConversationId);
+            }
+        }
         try {
             showToast('Initializing Aether AI...');
             if (window.AndroidTFLite) console.log("AndroidTFLite detected early.");
@@ -822,7 +916,9 @@
             showToast('Init error: ' + e.message);
         }
         btnSend.disabled = false; btnSendWelcome.disabled = false;
-        welcomeUserInput.focus();
+        if (!activeConversationId) {
+            welcomeUserInput.focus();
+        }
     }
 
     if (splashLogoImg) splashLogoImg.src = (savedTheme === 'dark') ? 'logo-white.png' : 'logo-black.png';

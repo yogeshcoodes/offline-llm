@@ -744,6 +744,44 @@ body {
     color: var(--text);
 }
 
+/* Markdown styles inside AI messages */
+.ai-message .message-text p {
+    margin-bottom: 0.5em;
+}
+
+.ai-message .message-text p:last-child {
+    margin-bottom: 0;
+}
+
+.ai-message .message-text strong {
+    font-weight: 700;
+}
+
+.ai-message .message-text em {
+    font-style: italic;
+}
+
+.ai-message .message-text code {
+    background: var(--primary-light);
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-family: 'Fira Code', monospace;
+    font-size: 0.9em;
+}
+
+.ai-message .message-text pre {
+    background: var(--primary-light);
+    padding: 12px;
+    border-radius: 12px;
+    overflow-x: auto;
+    margin: 8px 0;
+}
+
+.ai-message .message-text pre code {
+    background: none;
+    padding: 0;
+}
+
 .message-footer {
     display: flex;
     align-items: center;
