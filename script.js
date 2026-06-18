@@ -638,7 +638,7 @@
         return prompt;
     }
 
-function toggleSendStop(generating) {
+    function toggleSendStop(generating) {
         isGenerating = generating;
         const svgs = document.querySelectorAll('#btnSend svg, #btnSendWelcome svg');
         svgs.forEach(svg => {
@@ -838,7 +838,10 @@ function toggleSendStop(generating) {
             const wrapper = speakBtn.closest('.message-wrapper');
             const content = wrapper?.getAttribute('data-content') || '';
             
-            if (window.speechSynthesis) {
+            // OFFLINE TTS BRIDGE CALL
+            if (window.PiperTTS && typeof window.PiperTTS.speak === 'function') {
+                window.PiperTTS.speak(content);
+            } else if (window.speechSynthesis) {
                 window.speechSynthesis.cancel();
                 document.querySelectorAll('.speaking').forEach(el => el.classList.remove('speaking'));
                 
