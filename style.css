@@ -455,6 +455,78 @@ body {
     overflow: hidden;
 }
 
+/* Audio Player Widget */
+.audio-player {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(var(--surface-rgb), 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    gap: 12px;
+    z-index: 50;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    width: 90%;
+    max-width: 280px;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.audio-player.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, -20px);
+}
+
+.audio-btn {
+    background: none;
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 50%;
+    transition: background 0.2s, color 0.2s;
+    flex-shrink: 0;
+}
+
+.audio-btn svg {
+    width: 18px !important;
+    height: 18px !important;
+}
+
+.audio-btn:hover {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
+.audio-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden;
+}
+
+.audio-progress-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: var(--primary);
+    width: 0%;
+    border-radius: 3px;
+    transition: width 0.15s linear;
+}
+
 .desktop-sidebar-toggle {
     display: none;
     position: absolute;
@@ -710,7 +782,7 @@ body {
 #chatArea {
     flex: 1;
     overflow-y: auto;
-    padding: 20px;
+    padding: 20px; 
     display: none;
     flex-direction: column;
     gap: 16px;
@@ -733,6 +805,7 @@ body {
 .message-wrapper.ai {
     align-self: flex-start;
     align-items: flex-start;
+    width: 100%;
 }
 
 .message {
@@ -757,6 +830,14 @@ body {
     color: var(--text);
 }
 
+/* Image attachments in chat */
+.chat-message-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
 /* Markdown styles inside AI messages */
 .ai-message .message-text p {
     margin-bottom: 0.5em;
@@ -774,26 +855,97 @@ body {
     font-style: italic;
 }
 
-.ai-message .message-text code {
+/* --- FULLY OFFLINE PRISM CODE BLOCK STYLES --- */
+code[class*="language-"], pre[class*="language-"] {
+    color: #ccc;
+    background: none;
+    font-family: 'Fira Code', Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+    font-size: 0.9em;
+    text-align: left;
+    white-space: pre;
+    word-spacing: normal;
+    word-break: normal;
+    word-wrap: normal;
+    line-height: 1.5;
+    tab-size: 4;
+    hyphens: none;
+}
+/* Token colors */
+.token.comment, .token.block-comment, .token.prolog, .token.doctype, .token.cdata { color: #999; }
+.token.punctuation { color: #ccc; }
+.token.tag, .token.attr-name, .token.namespace, .token.deleted { color: #e2777a; }
+.token.function-name { color: #6196cc; }
+.token.boolean, .token.number, .token.function { color: #f08d49; }
+.token.property, .token.class-name, .token.constant, .token.symbol { color: #f8c555; }
+.token.selector, .token.important, .token.atrule, .token.keyword, .token.builtin { color: #cc99cd; }
+.token.string, .token.char, .token.attr-value, .token.regex, .token.variable { color: #7ec699; }
+.token.operator, .token.entity, .token.url { color: #67cdcc; }
+.token.important, .token.bold { font-weight: bold; }
+.token.italic { font-style: italic; }
+
+/* Custom Block Design */
+.code-block-wrapper {
+    background: #1e1e1e;
+    border-radius: 12px;
+    margin: 12px 0;
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+
+.code-block-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    font-family: 'Google Sans', 'Inter', sans-serif;
+    font-size: 0.75rem;
+}
+
+.code-block-lang {
+    color: #a0a0a0;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.code-block-copy-btn {
+    background: none;
+    border: none;
+    color: #a0a0a0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition: color 0.2s;
+    padding: 0;
+    font-family: inherit;
+}
+
+.code-block-copy-btn:hover {
+    color: #ffffff;
+}
+
+.ai-message .message-text pre {
+    margin: 0;
+    padding: 12px;
+    background: transparent;
+    overflow-x: auto;
+}
+
+/* Inline Code */
+.ai-message .message-text code:not(pre code) {
     background: var(--primary-light);
     padding: 2px 6px;
     border-radius: 6px;
     font-family: 'Fira Code', monospace;
     font-size: 0.9em;
+    color: inherit;
 }
-
-.ai-message .message-text pre {
-    background: var(--primary-light);
-    padding: 12px;
-    border-radius: 12px;
-    overflow-x: auto;
-    margin: 8px 0;
-}
-
-.ai-message .message-text pre code {
-    background: none;
-    padding: 0;
-}
+/* -------------------------------- */
 
 .message-footer {
     display: flex;
@@ -824,7 +976,8 @@ body {
 }
 
 .copy-msg-btn,
-.speak-msg-btn {
+.speak-msg-btn,
+.edit-msg-btn {
     background: none;
     border: none;
     cursor: pointer;
@@ -840,16 +993,10 @@ body {
 }
 
 .copy-msg-btn:hover,
-.speak-msg-btn:hover {
+.speak-msg-btn:hover,
+.edit-msg-btn:hover {
     opacity: 1 !important;
     color: var(--primary);
-}
-
-.copy-msg-btn svg,
-.speak-msg-btn svg {
-    width: 14px;
-    height: 14px;
-    stroke: currentColor;
 }
 
 .user .msg-actions {
@@ -888,7 +1035,6 @@ body {
 }
 
 @keyframes typingBounce {
-
     0%,
     80%,
     100% {
@@ -902,13 +1048,17 @@ body {
     }
 }
 
+/* Wrapping logic so scroll button floats properly inside */
 .input-container-wrapper {
     padding: 12px 20px 20px;
     background: var(--bg);
     padding-bottom: calc(20px + env(safe-area-inset-bottom));
     flex-shrink: 0;
+    position: relative; /* Extremely important for scroll-btn absolute pos */
+    z-index: 20;
 }
 
+/* Fixed Layout for Input Container */
 .input-container {
     display: flex;
     align-items: flex-end;
@@ -916,11 +1066,11 @@ body {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 28px;
-    padding: 8px 8px 8px 20px;
+    padding: 8px 12px;
     transition: border-color 0.2s;
     box-shadow: var(--shadow);
-    flex-wrap: wrap;
-    justify-content: flex-end;
+    flex-wrap: wrap; /* Only wraps if attachment preview exists */
+    justify-content: flex-start; 
     position: relative;
 }
 
@@ -928,9 +1078,66 @@ body {
     border-color: var(--primary);
 }
 
+/* Image Upload Preview Area */
+.attachment-preview {
+    width: 100%;
+    display: flex;
+    gap: 12px;
+    padding-bottom: 8px;
+    flex-wrap: wrap;
+    order: 0; /* Ensures it stays on top of the input elements */
+}
+
+.attachment-preview.hidden {
+    display: none;
+}
+
+.attachment-item {
+    position: relative;
+    width: 72px; /* Nicely sized preview */
+    height: 72px;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+}
+
+.attachment-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.attachment-item button {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+}
+
+.attachment-item button svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* Ordering the input controls perfectly inline */
+#btnAttach, #btnAttachWelcome {
+    order: 1;
+    margin-right: 0;
+}
+
 textarea {
-    flex: 1 1 100%;
-    min-width: 100%;
+    flex: 1; /* Takes up all middle space smoothly */
+    min-width: 0;
     border: none;
     resize: none;
     background: transparent;
@@ -939,9 +1146,21 @@ textarea {
     color: var(--text);
     outline: none;
     max-height: 120px;
-    padding: 8px 0;
+    padding: 10px 0;
     line-height: 1.4;
-    order: 1;
+    order: 2;
+}
+
+#btnMic, #btnMicWelcome {
+    order: 3;
+}
+
+#btnSend, #btnSendWelcome {
+    order: 4;
+    background: var(--primary);
+    color: white;
+    width: 44px;
+    height: 44px;
 }
 
 /* Base icon size – used as default for all screen sizes */
@@ -965,25 +1184,6 @@ textarea {
     color: var(--primary);
 }
 
-#btnAttach,
-#btnAttachWelcome {
-    order: 2;
-    margin-right: auto;
-}
-
-#btnMic,
-#btnMicWelcome {
-    order: 3;
-}
-
-#btnSend,
-#btnSendWelcome {
-    order: 4;
-    background: var(--primary);
-    color: white;
-    width: 44px;
-    height: 44px;
-}
 
 #btnSend:disabled,
 #btnSendWelcome:disabled {
@@ -1223,12 +1423,12 @@ textarea {
     margin-top: 8px;
 }
 
-/* ─── Scroll-down button (outside input wrapper, bottom-right) ─── */
+/* ─── Scroll-down button (Dynamically floating above input) ─── */
 .scroll-down-btn {
     position: absolute;
-    bottom: 135px;
+    bottom: calc(100% + 10px); /* This makes it float right on top of the input container wrapper */
     right: 40px;
-    z-index: 10;
+    z-index: 30;
     width: 40px;
     height: 40px;
     border-radius: 50%;
@@ -1293,8 +1493,8 @@ textarea {
         height: 40px;
     }
 
-    .scroll-down-btn {
-        bottom: 135px;
+    .audio-player {
+        top: 30px;
     }
 }
 
@@ -1363,13 +1563,15 @@ textarea {
     }
 
     .input-container {
-        gap: 8px;
         padding-left: 14px;
     }
 
     .scroll-down-btn {
-        bottom: 128px;
-        right: 15px;
+        right: 15px; /* Keeps it perfectly aligned with the mobile input padding */
+    }
+    
+    .audio-player {
+        top: 70px;
     }
 }
 

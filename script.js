@@ -47,23 +47,23 @@
     }
 
     // ==================== MULTI-PROVIDER API CALL (with context) ====================
-    async function callAIAPI(messages, apiKey, systemInstruction) {
+    async function callAIAPI(messages, apiKey, systemInstruction, signal) {
         const key = apiKey.trim();
         if (!key) throw new Error("No API key provided");
 
         if (key.startsWith("gsk_")) {
-            return await callGroqAPI(messages, key, systemInstruction);
+            return await callGroqAPI(messages, key, systemInstruction, signal);
         } else if (key.startsWith("sk-")) {
-            return await callOpenAIAPI(messages, key, systemInstruction);
+            return await callOpenAIAPI(messages, key, systemInstruction, signal);
         } else if (key.startsWith("AIza") || key.length >= 30) {
-            return await callGeminiAPI(messages, key, systemInstruction);
+            return await callGeminiAPI(messages, key, systemInstruction, signal);
         } else {
             console.warn("Unknown API key format, trying Gemini...");
-            return await callGeminiAPI(messages, key, systemInstruction);
+            return await callGeminiAPI(messages, key, systemInstruction, signal);
         }
     }
 
-    async function callGeminiAPI(messages, apiKey, systemInstruction) {
+    async function callGeminiAPI(messages, apiKey, systemInstruction, signal) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
         const contents = [];
         for (const msg of messages) {
@@ -77,7 +77,8 @@
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify(requestBody),
+            signal: signal
         });
         if (!response.ok) {
             const errorText = await response.text();
@@ -98,7 +99,7 @@
         "qwen-2.5-32b"
     ];
 
-    async function callGroqAPI(messages, apiKey, systemInstruction) {
+    async function callGroqAPI(messages, apiKey, systemInstruction, signal) {
         let fullMessages = [];
         if (systemInstruction) {
             fullMessages.push({ role: "system", content: systemInstruction });
@@ -117,7 +118,8 @@
                         model: model,
                         messages: fullMessages,
                         temperature: 0.7
-                    })
+                    }),
+                    signal: signal
                 });
                 if (!response.ok) {
                     const errText = await response.text();
@@ -134,6 +136,7 @@
                 return data.choices[0].message.content;
             } catch (err) {
                 lastError = err;
+                if (err.name === 'AbortError') throw err; // Don't continue if aborted
                 if (err.message.includes("decommissioned") || err.message.includes("not found")) continue;
                 throw err;
             }
@@ -141,7 +144,7 @@
         throw new Error(`All Groq models failed. Last error: ${lastError?.message || "Unknown"}`);
     }
 
-    async function callOpenAIAPI(messages, apiKey, systemInstruction) {
+    async function callOpenAIAPI(messages, apiKey, systemInstruction, signal) {
         const url = "https://api.openai.com/v1/chat/completions";
         let fullMessages = [];
         if (systemInstruction) {
@@ -158,7 +161,8 @@
                 model: "gpt-3.5-turbo",
                 messages: fullMessages,
                 temperature: 0.7
-            })
+            }),
+            signal: signal
         });
         if (!response.ok) {
             const errText = await response.text();
@@ -206,6 +210,15 @@
     const apiKeyInput = document.getElementById('apiKeyInput');
     const scrollDownBtn = document.getElementById('scrollDownBtn');
 
+    // Audio Player Refs
+    const audioPlayer = document.getElementById('audioPlayer');
+    const audioPlayPauseBtn = document.getElementById('audioPlayPauseBtn');
+    const audioCloseBtn = document.getElementById('audioCloseBtn');
+    const audioProgressFill = document.getElementById('audioProgressFill');
+    const audioIconPlay = document.getElementById('audioIconPlay');
+    const audioIconPause = document.getElementById('audioIconPause');
+    let currentUtterance = null;
+
     // ==================== STATE ====================
     let currentConversation = [];
     let typingIndicatorEl = null;
@@ -217,6 +230,12 @@
     let activeConversationId = null;
     let customInstructions = localStorage.getItem('customInstructions') || '';
     let apiKey = localStorage.getItem('apiKey') || '';
+    let pendingAttachments = [];
+
+    // Abort Logic & Streaming
+    let globalAbortController = null;
+    let isGenerating = false;
+    let typingInterval = null;
 
     // Auto-scroll state
     let autoScroll = true;
@@ -279,18 +298,101 @@
             .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, c => c);
     }
 
-    // Simple markdown to HTML
+    // Advanced Markdown parser ensuring code blocks don't get destroyed by <br> conversions
+    window.copyCodeBlock = function(btn) {
+        const pre = btn.closest('.code-block-wrapper').querySelector('pre');
+        const code = pre.textContent; // Pulls text cleanly without html tags
+        navigator.clipboard.writeText(code).then(() => {
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied!`;
+            setTimeout(() => {
+                btn.innerHTML = originalHtml;
+            }, 2000);
+        });
+    };
+
     function simpleMarkdown(text) {
         if (!text) return '';
         let html = escapeHtml(text);
-        html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+        
+        // 1. Extract Code Blocks so we don't mess up their formatting with <p> and <br>
+        const codeBlocks = [];
+        html = html.replace(/```(\w*)[ \t]*\r?\n([\s\S]*?)```/g, function(match, lang, code) {
+            codeBlocks.push({ lang, code });
+            return `\n\n___CODE_BLOCK_${codeBlocks.length - 1}___\n\n`; 
+        });
+        
+        // 2. Formatting inline text
         html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
         html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        html = html.replace(/\n\n/g, '</p><p>');
-        html = '<p>' + html.replace(/\n/g, '<br>') + '</p>';
-        html = html.replace(/<p><\/p>/g, '');
+        
+        // 3. Process lines and paragraphs
+        html = html.split(/\n\n+/).map(p => {
+            const trimmed = p.trim();
+            if (!trimmed) return '';
+            if (trimmed.startsWith('___CODE_BLOCK_')) return trimmed; // Ignore code placeholders
+            return '<p>' + trimmed.replace(/\n/g, '<br>') + '</p>';
+        }).join('');
+        
+        // 4. Re-inject formatted Code Blocks
+        codeBlocks.forEach((block, index) => {
+            const languageClass = block.lang ? `language-${block.lang.toLowerCase()}` : 'language-plaintext';
+            const langLabel = block.lang ? block.lang.toUpperCase() : 'CODE';
+            const blockHtml = `
+                <div class="code-block-wrapper">
+                    <div class="code-block-header">
+                        <span class="code-block-lang">${langLabel}</span>
+                        <button class="code-block-copy-btn" onclick="copyCodeBlock(this)">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                            Copy
+                        </button>
+                    </div>
+                    <pre><code class="${languageClass}">${block.code}</code></pre>
+                </div>
+            `;
+            html = html.replace(`___CODE_BLOCK_${index}___`, blockHtml);
+        });
+        
         return html;
+    }
+
+    // ─── Attachments Rendering ───
+    function renderAttachments() {
+        const previewWelcome = document.getElementById('attachmentPreviewWelcome');
+        const previewMain = document.getElementById('attachmentPreviewMain');
+        
+        const renderTo = (container) => {
+            if (!container) return;
+            container.innerHTML = '';
+            if (pendingAttachments.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+            container.classList.remove('hidden');
+            pendingAttachments.forEach((fileObj, idx) => {
+                const div = document.createElement('div');
+                div.className = 'attachment-item';
+                if (fileObj.type.startsWith('image/')) {
+                    div.innerHTML = `<img src="${fileObj.url}" alt="attachment"><button data-idx="${idx}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>`;
+                } else {
+                    div.innerHTML = `<div style="width:100%; height:100%; background:var(--primary-light); display:flex; align-items:center; justify-content:center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><button data-idx="${idx}"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>`;
+                }
+                container.appendChild(div);
+            });
+            
+            container.querySelectorAll('button').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const idx = parseInt(e.currentTarget.getAttribute('data-idx'));
+                    pendingAttachments.splice(idx, 1);
+                    renderAttachments();
+                    toggleSendButtonState();
+                });
+            });
+        };
+        
+        renderTo(previewWelcome);
+        renderTo(previewMain);
     }
 
     // ─── Auto-scroll control ───
@@ -322,8 +424,32 @@
         scrollDownBtn.addEventListener('click', scrollToBottom);
     }
 
+    // ─── Simulated Streaming Effect (Cursor line completely removed) ───
+    function simulateTyping(element, text, role, onComplete) {
+        let index = 0;
+        element.innerHTML = '';
+        
+        // Ensure intervals are cleared if multiple calls happen
+        if (typingInterval) clearInterval(typingInterval);
+
+        typingInterval = setInterval(() => {
+            index += 4; // Reveal 4 characters per tick for smooth but fast typing
+            if (index >= text.length) {
+                index = text.length;
+                clearInterval(typingInterval);
+                element.innerHTML = role === 'ai' ? simpleMarkdown(text) : escapeHtml(text);
+                if (window.Prism) Prism.highlightAllUnder(element.closest('.message-wrapper'));
+                if (onComplete) onComplete();
+            } else {
+                let currentText = text.substring(0, index);
+                element.innerHTML = role === 'ai' ? simpleMarkdown(currentText) : escapeHtml(currentText);
+            }
+            if (autoScroll) scrollToBottom();
+        }, 15);
+    }
+
     // ─── Message rendering ───
-    function appendMessage(role, content) {
+    function appendMessage(role, content, attachments = [], animate = false) {
         if (welcomeScreen.style.display !== 'none') {
             welcomeScreen.style.display = 'none';
             chatArea.style.display = 'flex';
@@ -332,29 +458,65 @@
         const wrapper = document.createElement('div');
         wrapper.className = `message-wrapper ${role === 'user' ? 'user' : 'ai'}`;
         wrapper.setAttribute('data-content', content);
+        
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const formattedContent = role === 'ai' ? simpleMarkdown(content) : escapeHtml(content);
+        
+        let attachmentHtml = '';
+        if (attachments && attachments.length > 0) {
+            attachmentHtml = '<div class="chat-message-attachments">';
+            attachments.forEach(att => {
+                if(att.type.startsWith('image/')) {
+                    attachmentHtml += `<img src="${att.url}" alt="attached image" style="max-width: 240px; max-height: 240px; width: auto; height: auto; object-fit: contain; border-radius: 12px; margin-top: 4px;">`;
+                } else {
+                    attachmentHtml += `<div style="background:rgba(0,0,0,0.15); padding:8px 12px; border-radius:8px; display:inline-flex; align-items:center; gap:8px; font-size:0.85rem;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> ${att.name}</div>`;
+                }
+            });
+            attachmentHtml += '</div>';
+        }
+
+        // Action Buttons with Strictly constrained SVGs
+        const editActionHtml = role === 'user' ? `
+            <button class="edit-msg-btn" title="Edit message">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+            </button>
+        ` : '';
+
         wrapper.innerHTML = `
             <div class="message ${role === 'user' ? 'user-message' : 'ai-message'}">
-                <div class="message-text">${formattedContent}</div>
+                ${attachmentHtml}
+                <div class="message-text"></div>
                 <div class="message-footer"><span class="message-time">${time}</span></div>
             </div>
             <div class="msg-actions">
+                ${editActionHtml}
                 <button class="copy-msg-btn" title="Copy message">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                 </button>
                 <button class="speak-msg-btn" title="Read aloud">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume2-icon lucide-volume-2"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>
                 </button>
             </div>
         `;
         chatArea.appendChild(wrapper);
+
+        const textEl = wrapper.querySelector('.message-text');
+
+        if (animate) {
+            simulateTyping(textEl, content, role, () => {
+                // Formatting done inside simulateTyping
+            });
+        } else {
+            textEl.innerHTML = role === 'ai' ? simpleMarkdown(content) : escapeHtml(content);
+            if (window.Prism) Prism.highlightAllUnder(wrapper);
+        }
+
         if (autoScroll) {
             scrollToBottom();
         } else {
             if (scrollDownBtn) scrollDownBtn.classList.add('visible');
         }
-        currentConversation.push({ role, content, timestamp: Date.now() });
+        
+        currentConversation.push({ role, content, attachments, timestamp: Date.now() });
 
         if (role === 'user' && !activeConversationId && currentConversation.filter(m => m.role === 'user').length === 1) saveCurrentConversation(true);
         if (role === 'user' && activeConversationId && currentConversation.filter(m => m.role === 'user').length === 1) updateConversationTitle(activeConversationId, content);
@@ -404,24 +566,14 @@
         if (!conv) return;
         activeConversationId = convId; currentConversation = [...conv.messages];
         chatArea.innerHTML = ''; typingIndicatorEl = null;
+        
+        // Re-render historical messages without animation
         currentConversation.forEach(msg => {
-            const wrapper = document.createElement('div');
-            wrapper.className = `message-wrapper ${msg.role === 'user' ? 'user' : 'ai'}`;
-            wrapper.setAttribute('data-content', msg.content);
-            const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const formattedContent = msg.role === 'ai' ? simpleMarkdown(msg.content) : escapeHtml(msg.content);
-            wrapper.innerHTML = `
-                <div class="message ${msg.role === 'user' ? 'user-message' : 'ai-message'}">
-                    <div class="message-text">${formattedContent}</div>
-                    <div class="message-footer"><span class="message-time">${time}</span></div>
-                </div>
-                <div class="msg-actions">
-                    <button class="copy-msg-btn" title="Copy message"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
-                    <button class="speak-msg-btn" title="Read aloud"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-volume2-icon lucide-volume-2"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg></button>
-                </div>
-            `;
-            chatArea.appendChild(wrapper);
+            appendMessage(msg.role, msg.content, msg.attachments, false);
+            // Quick cleanup of duplicate push from appendMessage
+            currentConversation.pop(); 
         });
+        
         welcomeScreen.style.display = 'none'; chatArea.style.display = 'flex';
         setActiveInput('chat'); scrollToBottom(); renderRecentChats();
         localStorage.setItem('activeConversationId', activeConversationId);
@@ -486,29 +638,79 @@
         return prompt;
     }
 
+function toggleSendStop(generating) {
+        isGenerating = generating;
+        const svgs = document.querySelectorAll('#btnSend svg, #btnSendWelcome svg');
+        svgs.forEach(svg => {
+            if (generating) {
+                // Stop Square Icon - increased width/height and adjusted x/y to keep it centered
+                svg.innerHTML = `<rect x="6" y="6" width="12" height="12" rx="2" ry="2" fill="currentColor" stroke="currentColor" stroke-width="2"/>`;
+            } else {
+                // Send Icon
+                svg.innerHTML = `<path d="m5 12 7-7 7 7" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 19V5" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+            }
+        });
+        
+        // Ensure buttons stay enabled during generation so we can click STOP
+        document.getElementById('btnSend').disabled = false;
+        document.getElementById('btnSendWelcome').disabled = false;
+    }
+
+    function toggleSendButtonState() {
+        const inputEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
+        const sendBtn = activeInput === 'welcome' ? btnSendWelcome : btnSend;
+        const hasText = inputEl.value.trim().length > 0;
+        const hasAttachments = pendingAttachments.length > 0;
+        
+        if (!isGenerating) {
+            sendBtn.disabled = !(hasText || hasAttachments);
+        }
+    }
+
     async function sendMessage() {
+        if (isGenerating) {
+            // STOP Logic
+            if (globalAbortController) globalAbortController.abort();
+            if (typingInterval) clearInterval(typingInterval);
+            isGenerating = false;
+            toggleSendStop(false);
+            showTypingIndicator(false);
+            toggleSendButtonState();
+            return;
+        }
+
         const inputEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
         const sendBtn = activeInput === 'welcome' ? btnSendWelcome : btnSend;
         const text = inputEl.value.trim();
-        if (!text) return;
+        
+        if (!text && pendingAttachments.length === 0) return;
         if (!modelReady && !apiKey) {
             showToast("AI engine not ready. Set API key in Settings or wait.");
             return;
         }
 
         inputEl.value = ''; inputEl.style.height = 'auto';
-        appendMessage('user', text);
+        
+        // Format prompt explicitly for attachments if any
+        let fullPrompt = text;
+        const attachmentsCopy = [...pendingAttachments];
+        if (attachmentsCopy.length > 0) {
+            const filesStr = attachmentsCopy.map(a => a.name).join(', ');
+            fullPrompt += `\n[User attached files: ${filesStr}]`;
+        }
+
+        appendMessage('user', text || '[Attachment Only]', attachmentsCopy, false);
+        
+        // Clear pending
+        pendingAttachments = [];
+        renderAttachments();
+
         autoScroll = true;
         showTypingIndicator(true);
-        sendBtn.disabled = true;
+        toggleSendStop(true); // Turns into STOP button
 
-        const timeoutId = setTimeout(() => {
-            if (sendBtn.disabled) {
-                showTypingIndicator(false);
-                appendMessage('ai', '⚠️ AI is taking too long. Please try again.');
-                sendBtn.disabled = false;
-            }
-        }, 60000);
+        globalAbortController = new AbortController();
+        const signal = globalAbortController.signal;
 
         try {
             let response;
@@ -516,13 +718,14 @@
                 const messages = currentConversation.map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }));
                 const systemInstruction = customInstructions.trim() || null;
                 try {
-                    response = await callAIAPI(messages, apiKey, systemInstruction);
+                    response = await callAIAPI(messages, apiKey, systemInstruction, signal);
                 } catch (apiErr) {
+                    if (apiErr.name === 'AbortError') throw apiErr; // Pass abort up
                     console.warn('Cloud API error:', apiErr);
                     if (modelReady && window.AndroidTFLite) {
                         showToast('API error, trying local model...');
                         response = await new Promise((resolve, reject) => {
-                            askLocalLLM(buildLocalPrompt(text), resolve, reject);
+                            askLocalLLM(buildLocalPrompt(fullPrompt), resolve, reject);
                         });
                     } else {
                         throw new Error(`API call failed: ${apiErr.message}`);
@@ -531,18 +734,22 @@
             } else {
                 if (!modelReady || !window.AndroidTFLite) throw new Error('Local model not ready');
                 response = await new Promise((resolve, reject) => {
-                    askLocalLLM(buildLocalPrompt(text), resolve, reject);
+                    askLocalLLM(buildLocalPrompt(fullPrompt), resolve, reject);
                 });
             }
-            clearTimeout(timeoutId);
             showTypingIndicator(false);
-            appendMessage('ai', response);
+            appendMessage('ai', response, [], true); // True for animate/typing effect
         } catch (err) {
-            clearTimeout(timeoutId);
-            showTypingIndicator(false);
-            appendMessage('ai', '⚠️ ' + (err.message || 'Unknown error'));
+            if (err.name === 'AbortError') {
+                showToast('Generation stopped.');
+                // Append partial info or ignore
+            } else {
+                showTypingIndicator(false);
+                appendMessage('ai', '⚠️ ' + (err.message || 'Unknown error'), [], false);
+            }
         } finally {
-            sendBtn.disabled = false;
+            toggleSendStop(false);
+            toggleSendButtonState();
             saveCurrentConversation(false);
             renderRecentChats();
             if (activeInput === 'welcome') welcomeUserInput.focus(); else userInput.focus();
@@ -550,6 +757,12 @@
     }
 
     function newChat() {
+        if (isGenerating) {
+            if (globalAbortController) globalAbortController.abort();
+            if (typingInterval) clearInterval(typingInterval);
+            isGenerating = false;
+            toggleSendStop(false);
+        }
         if (currentConversation.length > 0) saveCurrentConversation(false);
         activeConversationId = null; currentConversation = []; chatArea.innerHTML = ''; typingIndicatorEl = null;
         welcomeScreen.style.display = 'flex'; chatArea.style.display = 'none';
@@ -579,32 +792,91 @@
         URL.revokeObjectURL(url); showToast('Chat exported');
     }
 
-    // Copy & Speak
+    // Message Actions (Copy, Speak, Edit)
     chatArea.addEventListener('click', (e) => {
         const copyBtn = e.target.closest('.copy-msg-btn');
         const speakBtn = e.target.closest('.speak-msg-btn');
+        const editBtn = e.target.closest('.edit-msg-btn');
+        
         if (copyBtn) {
             const wrapper = copyBtn.closest('.message-wrapper');
             const content = wrapper?.getAttribute('data-content') || '';
             navigator.clipboard.writeText(content).then(() => showToast('Copied', 1500)).catch(() => showToast('Copy failed', 1500));
         }
+        
+        if (editBtn) {
+            const wrapper = editBtn.closest('.message-wrapper');
+            let content = wrapper?.getAttribute('data-content') || '';
+            if (content === '[Attachment Only]') content = ''; // Clean up fallback text
+            
+            const activeInputEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
+            activeInputEl.value = content;
+            activeInputEl.style.height = 'auto';
+            activeInputEl.style.height = Math.min(activeInputEl.scrollHeight, 120) + 'px';
+            activeInputEl.focus();
+            toggleSendButtonState();
+
+            // Slicing logic: remove this message and everything after it
+            const wrappers = Array.from(chatArea.querySelectorAll('.message-wrapper'));
+            const index = wrappers.indexOf(wrapper);
+            
+            if (index !== -1) {
+                // If the user is currently editing the *very first* message, we drop back to welcome screen if needed
+                if (index === 0 && wrappers.length <= 2) {
+                    // It's basically a new chat again
+                }
+                
+                for (let i = wrappers.length - 1; i >= index; i--) {
+                    wrappers[i].remove();
+                }
+                currentConversation = currentConversation.slice(0, index);
+                saveCurrentConversation(false);
+            }
+        }
+
         if (speakBtn) {
             const wrapper = speakBtn.closest('.message-wrapper');
             const content = wrapper?.getAttribute('data-content') || '';
-            if (window.PiperTTS && typeof window.PiperTTS.speak === 'function') {
-                window.PiperTTS.speak(content);
-            } else if (window.speechSynthesis) {
+            
+            if (window.speechSynthesis) {
                 window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(content);
-                utterance.onstart = () => speakBtn.classList.add('speaking');
-                utterance.onend = () => speakBtn.classList.remove('speaking');
-                utterance.onerror = () => speakBtn.classList.remove('speaking');
-                window.speechSynthesis.speak(utterance);
+                document.querySelectorAll('.speaking').forEach(el => el.classList.remove('speaking'));
+                
+                currentUtterance = new SpeechSynthesisUtterance(content);
+                const totalLength = content.length || 1; 
+
+                audioPlayer.classList.remove('hidden');
+                audioProgressFill.style.width = '0%';
+                audioIconPlay.style.display = 'none';
+                audioIconPause.style.display = 'block';
+                
+                currentUtterance.onstart = () => {
+                    speakBtn.classList.add('speaking');
+                };
+
+                currentUtterance.onboundary = (event) => {
+                    if (event.name === 'word') {
+                        const progressPercentage = (event.charIndex / totalLength) * 100;
+                        audioProgressFill.style.width = `${Math.min(progressPercentage, 100)}%`;
+                    }
+                };
+
+                const finishAudio = () => {
+                    speakBtn.classList.remove('speaking');
+                    audioPlayer.classList.add('hidden');
+                    audioProgressFill.style.width = '0%';
+                    currentUtterance = null;
+                };
+
+                currentUtterance.onend = finishAudio;
+                currentUtterance.onerror = finishAudio;
+
+                window.speechSynthesis.speak(currentUtterance);
             } else {
                 showToast('Speech synthesis not supported');
             }
         }
-        // Only re‑focus the input if it was already focused (keyboard open)
+        
         const activeInputEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
         if (activeInputEl && (document.activeElement === welcomeUserInput || document.activeElement === userInput)) {
             setTimeout(() => {
@@ -612,6 +884,31 @@
                 activeInputEl.setSelectionRange(activeInputEl.value.length, activeInputEl.value.length);
             }, 100);
         }
+    });
+
+    // Audio Player Controls
+    audioPlayPauseBtn.addEventListener('click', () => {
+        if (window.speechSynthesis) {
+            if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
+                window.speechSynthesis.pause();
+                audioIconPlay.style.display = 'block';
+                audioIconPause.style.display = 'none';
+            } else if (window.speechSynthesis.paused) {
+                window.speechSynthesis.resume();
+                audioIconPlay.style.display = 'none';
+                audioIconPause.style.display = 'block';
+            }
+        }
+    });
+
+    audioCloseBtn.addEventListener('click', () => {
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
+        audioPlayer.classList.add('hidden');
+        audioProgressFill.style.width = '0%';
+        document.querySelectorAll('.speaking').forEach(el => el.classList.remove('speaking'));
+        currentUtterance = null;
     });
 
     function closeAllDropdowns() { dropdownMenu.classList.add('hidden'); mobileDropdownMenu.classList.add('hidden'); }
@@ -659,19 +956,27 @@
         if (sendOnEnter && e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             const sendBtn = activeInput === 'welcome' ? btnSendWelcome : btnSend;
-            if (!sendBtn.disabled) sendMessage();
+            if (!sendBtn.disabled || isGenerating) sendMessage();
         }
     }
+    
     welcomeUserInput.addEventListener('keydown', e => handleEnterKey(e, welcomeUserInput));
     userInput.addEventListener('keydown', e => handleEnterKey(e, userInput));
 
-    welcomeUserInput.addEventListener('input', function () { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 120) + 'px'; });
-    userInput.addEventListener('input', function () { this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 120) + 'px'; });
+    welcomeUserInput.addEventListener('input', function () { 
+        this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 120) + 'px'; 
+        toggleSendButtonState();
+    });
+    userInput.addEventListener('input', function () { 
+        this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 120) + 'px'; 
+        toggleSendButtonState();
+    });
 
     document.querySelectorAll('.suggested-prompt').forEach(btn => {
         btn.addEventListener('click', function () {
             const prompt = this.getAttribute('data-prompt');
             if (activeInput === 'welcome') welcomeUserInput.value = prompt; else userInput.value = prompt;
+            toggleSendButtonState();
             sendMessage();
         });
     });
@@ -683,25 +988,24 @@
         sidebar.classList.add('open');
         overlay.classList.add('active');
     }
-
+    
     function closeSidebar() {
         sidebar.classList.remove('open');
         overlay.classList.remove('active');
     }
 
     document.getElementById('sidebarExpandBtn').addEventListener('click', (e) => {
-        // Prevents event from bubbling to overlay immediately
-        e.stopPropagation();
+        e.stopPropagation(); 
         openSidebar();
     });
-
+    
     overlay.addEventListener('click', closeSidebar);
     desktopSidebarToggle.addEventListener('click', (e) => {
         e.stopPropagation();
         document.body.classList.toggle('sidebar-collapsed');
     });
 
-    // ─── Safe Swipe Gestures (Mobile Only) ───
+    // ─── Relaxed Swipe Gestures (Mobile Only) ───
     function initSwipeGestures() {
         let touchStartX = 0;
         let touchStartY = 0;
@@ -718,15 +1022,13 @@
             const deltaX = touchEndX - touchStartX;
             const deltaY = touchEndY - touchStartY;
 
-            // Define swipe logic: must move mostly horizontally and cross threshold
-            if (Math.abs(deltaX) > 40 && Math.abs(deltaY) < 60) {
+            // Relaxed swipe logic: Horizontal distance must be greater than vertical, and exceed 40px
+            if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
                 const isOpen = sidebar.classList.contains('open');
-                // Target detection to skip swipes intentionally made inside messages
                 const isMessage = e.target.closest('.message-wrapper');
 
                 if (deltaX > 0 && !isOpen) {
                     // Swipe right to OPEN
-                    // Open if not dragging exactly over a message, OR if swiping from very left edge
                     if (!isMessage || touchStartX < 30) {
                         openSidebar();
                     }
@@ -816,11 +1118,20 @@
             input.addEventListener('change', (e) => {
                 const files = e.target.files;
                 if (!files || files.length === 0) return;
-                const fileNames = Array.from(files).map(f => f.name).join(', ');
-                const typeHint = input.getAttribute('data-type') || 'file';
-                appendMessage('user', `📎 Attached ${typeHint}: ${fileNames}`);
-                saveCurrentConversation(false);
-                renderRecentChats();
+                
+                Array.from(files).forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        pendingAttachments.push({
+                            name: file.name,
+                            type: file.type,
+                            url: ev.target.result
+                        });
+                        renderAttachments();
+                        toggleSendButtonState();
+                    };
+                    reader.readAsDataURL(file);
+                });
             });
             input.click();
         };
@@ -829,7 +1140,7 @@
             popup.classList.add('hidden');
             const input = document.createElement('input');
             input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
-            input.setAttribute('data-type', 'photo'); input.style.display = 'none';
+            input.style.display = 'none';
             document.body.appendChild(input);
             handleFileInput(input);
         });
@@ -837,7 +1148,7 @@
             popup.classList.add('hidden');
             const input = document.createElement('input');
             input.type = 'file'; input.accept = 'image/*';
-            input.setAttribute('data-type', 'photo'); input.style.display = 'none';
+            input.style.display = 'none';
             document.body.appendChild(input);
             handleFileInput(input);
         });
@@ -845,7 +1156,7 @@
             popup.classList.add('hidden');
             const input = document.createElement('input');
             input.type = 'file'; input.accept = '*/*'; input.multiple = true;
-            input.setAttribute('data-type', 'file'); input.style.display = 'none';
+            input.style.display = 'none';
             document.body.appendChild(input);
             handleFileInput(input);
         });
@@ -1011,7 +1322,7 @@
             console.error("Init error:", e);
             showToast('Init error: ' + e.message);
         }
-        btnSend.disabled = false; btnSendWelcome.disabled = false;
+        toggleSendButtonState();
         if (!activeConversationId) {
             welcomeUserInput.focus();
         }
