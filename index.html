@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport"
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Aether AI</title>
+    <title>Aethos AI</title>
     <link rel="stylesheet" href="style.css">
     <link rel="icon" type="favicon" href="logo-black.png">
 </head>
@@ -14,8 +14,8 @@
     <!-- Splash Screen Overlay -->
     <div id="splashOverlay" class="splash-overlay">
         <div class="splash-content">
-            <img src="logo-black.png" alt="Aether AI Logo" class="splash-logo" id="splashLogoImg">
-            <div class="splash-text">Welcome to <span>Aether AI</span></div>
+            <img src="logo-black.png" alt="Aethos AI Logo" class="splash-logo" id="splashLogoImg">
+            <div class="splash-text">Welcome to <span>Aethos AI</span></div>
         </div>
     </div>
 
@@ -25,7 +25,7 @@
 
         <aside id="sidebar">
             <div class="sidebar-header">
-                <span class="sidebar-title">Aether AI</span>
+                <span class="sidebar-title">Aethos AI</span>
             </div>
             <div class="sidebar-search">
                 <input type="text" placeholder="Search chats..." id="searchInput">
@@ -190,7 +190,7 @@
                 </div>
                 <div class="welcome-input-container" id="welcomeInputContainer">
                     <div class="input-container">
-                        <textarea id="welcomeUserInput" rows="1" placeholder="Message Aether AI..."></textarea>
+                        <textarea id="welcomeUserInput" rows="1" placeholder="Message Aethos AI..."></textarea>
                         <button class="icon-btn" id="btnMicWelcome" title="Voice input">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
@@ -220,9 +220,18 @@
 
             <div id="chatArea"></div>
 
+            <!-- Scroll-down button – now positioned at bottom-right outside the input wrapper -->
+            <button class="scroll-down-btn" id="scrollDownBtn" title="Scroll to bottom">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    class="lucide lucide-chevron-down-icon lucide-chevron-down">
+                    <path d="m6 9 6 6 6-6" />
+                </svg>
+            </button>
+
             <div class="input-container-wrapper" id="chatInputWrapper" style="display:none;">
                 <div class="input-container">
-                    <textarea id="userInput" rows="1" placeholder="Message Aether AI..."></textarea>
+                    <textarea id="userInput" rows="1" placeholder="Message Aethos AI..."></textarea>
                     <button class="icon-btn" id="btnMic" title="Voice input">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />

@@ -1,5 +1,5 @@
 (function () {
-    console.log("Aether AI script starting... (Multi-API support with fallback)");
+    console.log("Aethos AI script starting... (Multi-API support with fallback)");
 
     // ==================== LOCAL MODEL BRIDGE ====================
     let pendingCallbacks = {};
@@ -63,7 +63,6 @@
         }
     }
 
-    // Gemini API with full conversation
     async function callGeminiAPI(messages, apiKey, systemInstruction) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
         const contents = [];
@@ -187,6 +186,7 @@
     const confirmClearDialog = document.getElementById('confirmClearDialog');
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
+    const main = document.getElementById('main');
     const themeBtn = document.getElementById('btnThemeToggle');
     const themeLabel = themeBtn.querySelector('.theme-label');
     const themeIcon = document.getElementById('themeIcon');
@@ -205,6 +205,7 @@
     const searchInput = document.getElementById('searchInput');
     const customInstructionsInput = document.getElementById('customInstructions');
     const apiKeyInput = document.getElementById('apiKeyInput');
+    const scrollDownBtn = document.getElementById('scrollDownBtn');
 
     // ==================== STATE ====================
     let currentConversation = [];
@@ -217,6 +218,8 @@
     let activeConversationId = null;
     let customInstructions = localStorage.getItem('customInstructions') || '';
     let apiKey = localStorage.getItem('apiKey') || '';
+
+    let autoScroll = true;
 
     // Persistence helpers
     function persistData() {
@@ -238,7 +241,6 @@
         renderRecentChats();
     }
 
-    // Apply accent
     function applyAccent(color) {
         currentAccent = color;
         document.body.style.setProperty('--primary', color);
@@ -261,8 +263,12 @@
     apiKeyInput.value = apiKey;
 
     function showToast(msg, duration = 2500) {
-        toast.textContent = msg; toast.style.display = 'block';
-        setTimeout(() => { toast.style.display = 'none'; }, duration);
+        toast.textContent = msg;
+        toast.classList.add('visible');
+        clearTimeout(toast._timeout);
+        toast._timeout = setTimeout(() => {
+            toast.classList.remove('visible');
+        }, duration);
     }
 
     function escapeHtml(str) {
@@ -271,23 +277,42 @@
             .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, c => c);
     }
 
-    // Simple markdown to HTML
     function simpleMarkdown(text) {
         if (!text) return '';
         let html = escapeHtml(text);
-        // Code blocks (```)
         html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-        // Inline code
         html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-        // Bold and italic
         html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        // Paragraphs
         html = html.replace(/\n\n/g, '</p><p>');
         html = '<p>' + html.replace(/\n/g, '<br>') + '</p>';
-        // Clean empty paragraphs
         html = html.replace(/<p><\/p>/g, '');
         return html;
+    }
+
+    function updateScrollState() {
+        const threshold = 50;
+        const diff = chatArea.scrollHeight - chatArea.clientHeight - chatArea.scrollTop;
+        if (diff < threshold) {
+            autoScroll = true;
+            if (scrollDownBtn) scrollDownBtn.classList.remove('visible');
+        } else {
+            autoScroll = false;
+            if (scrollDownBtn) scrollDownBtn.classList.add('visible');
+        }
+    }
+
+    chatArea.addEventListener('scroll', updateScrollState);
+    chatArea.addEventListener('touchstart', () => { autoScroll = false; }, { passive: true });
+
+    function scrollToBottom() {
+        chatArea.scrollTop = chatArea.scrollHeight;
+        autoScroll = true;
+        if (scrollDownBtn) scrollDownBtn.classList.remove('visible');
+    }
+
+    if (scrollDownBtn) {
+        scrollDownBtn.addEventListener('click', scrollToBottom);
     }
 
     function appendMessage(role, content) {
@@ -316,7 +341,11 @@
             </div>
         `;
         chatArea.appendChild(wrapper);
-        chatArea.scrollTop = chatArea.scrollHeight;
+        if (autoScroll) {
+            scrollToBottom();
+        } else {
+            if (scrollDownBtn) scrollDownBtn.classList.add('visible');
+        }
         currentConversation.push({ role, content, timestamp: Date.now() });
 
         if (role === 'user' && !activeConversationId && currentConversation.filter(m => m.role === 'user').length === 1) saveCurrentConversation(true);
@@ -328,7 +357,7 @@
         if (show && !typingIndicatorEl) {
             const div = document.createElement('div'); div.className = 'typing-indicator';
             div.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
-            chatArea.appendChild(div); chatArea.scrollTop = chatArea.scrollHeight; typingIndicatorEl = div;
+            chatArea.appendChild(div); scrollToBottom(); typingIndicatorEl = div;
         } else if (!show && typingIndicatorEl) { typingIndicatorEl.remove(); typingIndicatorEl = null; }
     }
 
@@ -386,7 +415,7 @@
             chatArea.appendChild(wrapper);
         });
         welcomeScreen.style.display = 'none'; chatArea.style.display = 'flex';
-        setActiveInput('chat'); chatArea.scrollTop = chatArea.scrollHeight; renderRecentChats();
+        setActiveInput('chat'); scrollToBottom(); renderRecentChats();
         localStorage.setItem('activeConversationId', activeConversationId);
     }
 
@@ -429,18 +458,24 @@
         });
     }
 
-    // Build full conversation prompt for local model
     function buildLocalPrompt(newUserMessage) {
-        const systemPrompt = customInstructions.trim()
-            ? `System: ${customInstructions.trim()}\n`
-            : 'System: You are Aether AI, a smart assistant. Answer directly and helpfully, never invent questions or add unrelated information.\n';
-        let history = '';
+        const defaultSystem = 'You are Aethos AI, a helpful, concise assistant. Answer directly and never invent questions or unrelated text. Do not write "User:" or "Assistant:" in your response.';
+        const systemPrompt = customInstructions.trim() || defaultSystem;
+
+        let prompt = '<|begin_of_text|>';
+        prompt += `<|start_header_id|>system<|end_header_id|>\n${systemPrompt}<|eot_id|>`;
+
         for (const msg of currentConversation) {
-            if (msg.role === 'user') history += `User: ${msg.content}\n`;
-            else if (msg.role === 'ai') history += `Assistant: ${msg.content}\n`;
+            if (msg.role === 'user') {
+                prompt += `<|start_header_id|>user<|end_header_id|>\n${msg.content}<|eot_id|>`;
+            } else if (msg.role === 'ai') {
+                prompt += `<|start_header_id|>assistant<|end_header_id|>\n${msg.content}<|eot_id|>`;
+            }
         }
-        history += `User: ${newUserMessage}\nAssistant: `;
-        return systemPrompt + history;
+
+        prompt += `<|start_header_id|>user<|end_header_id|>\n${newUserMessage}<|eot_id|>`;
+        prompt += `<|start_header_id|>assistant<|end_header_id|>\n`;
+        return prompt;
     }
 
     async function sendMessage() {
@@ -455,6 +490,7 @@
 
         inputEl.value = ''; inputEl.style.height = 'auto';
         appendMessage('user', text);
+        autoScroll = true;
         showTypingIndicator(true);
         sendBtn.disabled = true;
 
@@ -531,11 +567,11 @@
         const data = JSON.stringify(currentConversation, null, 2);
         const blob = new Blob([data], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `aether_chat_${Date.now()}.json`; a.click();
+        const a = document.createElement('a'); a.href = url; a.download = `aethos_chat_${Date.now()}.json`; a.click();
         URL.revokeObjectURL(url); showToast('Chat exported');
     }
 
-    // Copy & Speak
+    // Copy & Speak – only refocus if keyboard was already open
     chatArea.addEventListener('click', (e) => {
         const copyBtn = e.target.closest('.copy-msg-btn');
         const speakBtn = e.target.closest('.speak-msg-btn');
@@ -547,12 +583,9 @@
         if (speakBtn) {
             const wrapper = speakBtn.closest('.message-wrapper');
             const content = wrapper?.getAttribute('data-content') || '';
-            // Piper TTS hook: if native Piper bridge is available, use it
             if (window.PiperTTS && typeof window.PiperTTS.speak === 'function') {
                 window.PiperTTS.speak(content);
-                return;
-            }
-            if (window.speechSynthesis) {
+            } else if (window.speechSynthesis) {
                 window.speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(content);
                 utterance.onstart = () => speakBtn.classList.add('speaking');
@@ -562,6 +595,13 @@
             } else {
                 showToast('Speech synthesis not supported');
             }
+        }
+        const activeInputEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
+        if (activeInputEl && (document.activeElement === welcomeUserInput || document.activeElement === userInput)) {
+            setTimeout(() => {
+                activeInputEl.focus();
+                activeInputEl.setSelectionRange(activeInputEl.value.length, activeInputEl.value.length);
+            }, 100);
         }
     });
 
@@ -575,6 +615,7 @@
     document.getElementById('dropdownExportChat').addEventListener('click', () => { closeAllDropdowns(); exportChat(); });
     document.getElementById('mobileDropdownExportChat').addEventListener('click', () => { closeAllDropdowns(); exportChat(); });
 
+    // Theme
     function updateLogos(dark) {
         welcomeLogo.src = dark ? 'logo-white.png' : 'logo-black.png';
         if (splashLogoImg) splashLogoImg.src = dark ? 'logo-white.png' : 'logo-black.png';
@@ -629,23 +670,72 @@
 
     searchInput.addEventListener('input', renderRecentChats);
 
-    // Sidebar
-    function openSidebar() { sidebar.classList.add('open'); overlay.classList.add('active'); }
-    function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('active'); }
+    // ==================== SIDEBAR FIXED ====================
+    function openSidebar() {
+        sidebar.classList.add('open');
+        overlay.classList.add('active');
+    }
 
-    document.getElementById('sidebarExpandBtn').addEventListener('click', openSidebar);
+    function closeSidebar() {
+        sidebar.classList.remove('open');
+        overlay.classList.remove('active');
+    }
+
+    // Toggle button – now toggles correctly
+    document.getElementById('sidebarExpandBtn').addEventListener('click', () => {
+        if (sidebar.classList.contains('open')) {
+            closeSidebar();
+        } else {
+            openSidebar();
+        }
+    });
+
     overlay.addEventListener('click', closeSidebar);
     desktopSidebarToggle.addEventListener('click', () => document.body.classList.toggle('sidebar-collapsed'));
 
-    let touchStartX = 0;
-    sidebar.addEventListener('touchstart', (e) => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });
-    sidebar.addEventListener('touchend', (e) => {
-        if (!sidebar.classList.contains('open')) return;
-        const deltaX = e.changedTouches[0].screenX - touchStartX;
-        if (deltaX < -50) { closeSidebar(); }
+    // Swipe gesture on main area (except messages) to open/close sidebar
+    let gestureStartX = 0, gestureStartY = 0, gestureActive = false;
+
+    main.addEventListener('touchstart', (e) => {
+        // Exclude touches on message wrappers and the chat area itself to avoid interfering with scroll/selection
+        if (e.target.closest('#chatArea') || e.target.closest('.message-wrapper')) return;
+        const touch = e.touches[0];
+        gestureStartX = touch.clientX;
+        gestureStartY = touch.clientY;
+        gestureActive = true;
+    }, { passive: false });
+
+    main.addEventListener('touchmove', (e) => {
+        if (!gestureActive) return;
+        const touch = e.touches[0];
+        const dx = touch.clientX - gestureStartX;
+        const dy = touch.clientY - gestureStartY;
+
+        // If vertical movement is larger, let the scroll happen normally
+        if (Math.abs(dy) > Math.abs(dx)) {
+            gestureActive = false;
+            return;
+        }
+
+        // Right swipe (open sidebar if not already open)
+        if (dx > 50 && !sidebar.classList.contains('open')) {
+            e.preventDefault();
+            openSidebar();
+            gestureActive = false;
+        }
+        // Left swipe (close sidebar if open)
+        if (dx < -50 && sidebar.classList.contains('open')) {
+            e.preventDefault();
+            closeSidebar();
+            gestureActive = false;
+        }
+    }, { passive: false });
+
+    main.addEventListener('touchend', () => {
+        gestureActive = false;
     });
 
-    // Settings
+    // ==================== SETTINGS ====================
     document.getElementById('btnSettings').addEventListener('click', () => {
         sendOnEnterCheckbox.checked = sendOnEnter;
         customInstructionsInput.value = customInstructions;
@@ -668,7 +758,7 @@
     });
     settingsModalOverlay.addEventListener('click', (e) => { if (e.target === settingsModalOverlay) settingsModalOverlay.classList.add('hidden'); });
 
-    // ==================== User Account Modal ====================
+    // ==================== USER ACCOUNT ====================
     const userAccountModal = document.getElementById('userAccountModal');
     const btnUserAccount = document.getElementById('btnUserAccount');
     const btnUserAccountClose = document.getElementById('btnUserAccountClose');
@@ -686,7 +776,7 @@
         });
     });
 
-    // ==================== Attach popup ====================
+    // ==================== ATTACH POPUP ====================
     function createAttachPopup(attachBtn) {
         if (attachBtn._attachPopup) return attachBtn._attachPopup;
         const popup = document.createElement('div');
@@ -766,7 +856,7 @@
     document.getElementById('btnAttachWelcome').addEventListener('click', (e) => { e.stopPropagation(); toggleAttachPopup(document.getElementById('btnAttachWelcome')); });
     document.addEventListener('click', (e) => { if (!e.target.closest('.attach-popup') && !e.target.closest('.icon-btn')) { document.querySelectorAll('.attach-popup').forEach(p => p.classList.add('hidden')); } });
 
-    // ==================== Mic ====================
+    // ==================== MIC ====================
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
     let isListening = false;
@@ -894,7 +984,6 @@
     async function startApp() {
         console.log("App Init: Checking bridge...");
         loadPersistedData();
-        // If there was a persisted active conversation, load it
         if (activeConversationId) {
             const conv = allConversations.find(c => c.id === activeConversationId);
             if (conv) {
@@ -902,7 +991,7 @@
             }
         }
         try {
-            showToast('Initializing Aether AI...');
+            showToast('Initializing Aethos AI...');
             if (window.AndroidTFLite) console.log("AndroidTFLite detected early.");
             await waitForBridge();
             if (window.AndroidTFLite) {
