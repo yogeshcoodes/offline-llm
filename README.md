@@ -6,7 +6,7 @@ An Android AI assistant that supports both offline and online AI conversations. 
 
 [Open Frontend Preview](https://yogeshcoodes.github.io/offline-llm/)
 
-**Note:** The website demonstrates the interface only. To use the assistant, download and install the Android application.
+**Note:** The website supports API-based AI providers only. To use offline AI on your device, download and install the Android application.
 
 ## Features
 
