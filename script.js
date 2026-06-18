@@ -186,7 +186,6 @@
     const confirmClearDialog = document.getElementById('confirmClearDialog');
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');
-    const main = document.getElementById('main');
     const themeBtn = document.getElementById('btnThemeToggle');
     const themeLabel = themeBtn.querySelector('.theme-label');
     const themeIcon = document.getElementById('themeIcon');
@@ -219,6 +218,7 @@
     let customInstructions = localStorage.getItem('customInstructions') || '';
     let apiKey = localStorage.getItem('apiKey') || '';
 
+    // Auto-scroll state
     let autoScroll = true;
 
     // Persistence helpers
@@ -241,6 +241,7 @@
         renderRecentChats();
     }
 
+    // Apply accent
     function applyAccent(color) {
         currentAccent = color;
         document.body.style.setProperty('--primary', color);
@@ -262,6 +263,7 @@
     function saveCustomInstructions(val) { customInstructions = val; localStorage.setItem('customInstructions', val); }
     apiKeyInput.value = apiKey;
 
+    // Toast with fade
     function showToast(msg, duration = 2500) {
         toast.textContent = msg;
         toast.classList.add('visible');
@@ -277,6 +279,7 @@
             .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, c => c);
     }
 
+    // Simple markdown to HTML
     function simpleMarkdown(text) {
         if (!text) return '';
         let html = escapeHtml(text);
@@ -290,6 +293,7 @@
         return html;
     }
 
+    // ─── Auto-scroll control ───
     function updateScrollState() {
         const threshold = 50;
         const diff = chatArea.scrollHeight - chatArea.clientHeight - chatArea.scrollTop;
@@ -303,7 +307,10 @@
     }
 
     chatArea.addEventListener('scroll', updateScrollState);
-    chatArea.addEventListener('touchstart', () => { autoScroll = false; }, { passive: true });
+
+    chatArea.addEventListener('touchstart', () => {
+        autoScroll = false;
+    }, { passive: true });
 
     function scrollToBottom() {
         chatArea.scrollTop = chatArea.scrollHeight;
@@ -315,6 +322,7 @@
         scrollDownBtn.addEventListener('click', scrollToBottom);
     }
 
+    // ─── Message rendering ───
     function appendMessage(role, content) {
         if (welcomeScreen.style.display !== 'none') {
             welcomeScreen.style.display = 'none';
@@ -571,7 +579,7 @@
         URL.revokeObjectURL(url); showToast('Chat exported');
     }
 
-    // Copy & Speak – only refocus if keyboard was already open
+    // Copy & Speak
     chatArea.addEventListener('click', (e) => {
         const copyBtn = e.target.closest('.copy-msg-btn');
         const speakBtn = e.target.closest('.speak-msg-btn');
@@ -596,6 +604,7 @@
                 showToast('Speech synthesis not supported');
             }
         }
+        // Only re‑focus the input if it was already focused (keyboard open)
         const activeInputEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
         if (activeInputEl && (document.activeElement === welcomeUserInput || document.activeElement === userInput)) {
             setTimeout(() => {
@@ -615,7 +624,6 @@
     document.getElementById('dropdownExportChat').addEventListener('click', () => { closeAllDropdowns(); exportChat(); });
     document.getElementById('mobileDropdownExportChat').addEventListener('click', () => { closeAllDropdowns(); exportChat(); });
 
-    // Theme
     function updateLogos(dark) {
         welcomeLogo.src = dark ? 'logo-white.png' : 'logo-black.png';
         if (splashLogoImg) splashLogoImg.src = dark ? 'logo-white.png' : 'logo-black.png';
@@ -670,7 +678,7 @@
 
     searchInput.addEventListener('input', renderRecentChats);
 
-    // ==================== SIDEBAR FIXED ====================
+    // ─── Sidebar toggle (Clean CSS Toggles) ───
     function openSidebar() {
         sidebar.classList.add('open');
         overlay.classList.add('active');
@@ -681,61 +689,60 @@
         overlay.classList.remove('active');
     }
 
-    // Toggle button – now toggles correctly
-    document.getElementById('sidebarExpandBtn').addEventListener('click', () => {
-        if (sidebar.classList.contains('open')) {
-            closeSidebar();
-        } else {
-            openSidebar();
-        }
+    document.getElementById('sidebarExpandBtn').addEventListener('click', (e) => {
+        // Prevents event from bubbling to overlay immediately
+        e.stopPropagation();
+        openSidebar();
     });
 
     overlay.addEventListener('click', closeSidebar);
-    desktopSidebarToggle.addEventListener('click', () => document.body.classList.toggle('sidebar-collapsed'));
-
-    // Swipe gesture on main area (except messages) to open/close sidebar
-    let gestureStartX = 0, gestureStartY = 0, gestureActive = false;
-
-    main.addEventListener('touchstart', (e) => {
-        // Exclude touches on message wrappers and the chat area itself to avoid interfering with scroll/selection
-        if (e.target.closest('#chatArea') || e.target.closest('.message-wrapper')) return;
-        const touch = e.touches[0];
-        gestureStartX = touch.clientX;
-        gestureStartY = touch.clientY;
-        gestureActive = true;
-    }, { passive: false });
-
-    main.addEventListener('touchmove', (e) => {
-        if (!gestureActive) return;
-        const touch = e.touches[0];
-        const dx = touch.clientX - gestureStartX;
-        const dy = touch.clientY - gestureStartY;
-
-        // If vertical movement is larger, let the scroll happen normally
-        if (Math.abs(dy) > Math.abs(dx)) {
-            gestureActive = false;
-            return;
-        }
-
-        // Right swipe (open sidebar if not already open)
-        if (dx > 50 && !sidebar.classList.contains('open')) {
-            e.preventDefault();
-            openSidebar();
-            gestureActive = false;
-        }
-        // Left swipe (close sidebar if open)
-        if (dx < -50 && sidebar.classList.contains('open')) {
-            e.preventDefault();
-            closeSidebar();
-            gestureActive = false;
-        }
-    }, { passive: false });
-
-    main.addEventListener('touchend', () => {
-        gestureActive = false;
+    desktopSidebarToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.body.classList.toggle('sidebar-collapsed');
     });
 
-    // ==================== SETTINGS ====================
+    // ─── Safe Swipe Gestures (Mobile Only) ───
+    function initSwipeGestures() {
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].clientX;
+            touchStartY = e.changedTouches[0].clientY;
+        }, { passive: true });
+
+        document.addEventListener('touchend', (e) => {
+            const touchEndX = e.changedTouches[0].clientX;
+            const touchEndY = e.changedTouches[0].clientY;
+
+            const deltaX = touchEndX - touchStartX;
+            const deltaY = touchEndY - touchStartY;
+
+            // Define swipe logic: must move mostly horizontally and cross threshold
+            if (Math.abs(deltaX) > 40 && Math.abs(deltaY) < 60) {
+                const isOpen = sidebar.classList.contains('open');
+                // Target detection to skip swipes intentionally made inside messages
+                const isMessage = e.target.closest('.message-wrapper');
+
+                if (deltaX > 0 && !isOpen) {
+                    // Swipe right to OPEN
+                    // Open if not dragging exactly over a message, OR if swiping from very left edge
+                    if (!isMessage || touchStartX < 30) {
+                        openSidebar();
+                    }
+                } else if (deltaX < 0 && isOpen) {
+                    // Swipe left to CLOSE
+                    closeSidebar();
+                }
+            }
+        }, { passive: true });
+    }
+
+    if (window.innerWidth <= 768) {
+        initSwipeGestures();
+    }
+
+    // Settings
     document.getElementById('btnSettings').addEventListener('click', () => {
         sendOnEnterCheckbox.checked = sendOnEnter;
         customInstructionsInput.value = customInstructions;
@@ -758,7 +765,7 @@
     });
     settingsModalOverlay.addEventListener('click', (e) => { if (e.target === settingsModalOverlay) settingsModalOverlay.classList.add('hidden'); });
 
-    // ==================== USER ACCOUNT ====================
+    // ==================== User Account Modal ====================
     const userAccountModal = document.getElementById('userAccountModal');
     const btnUserAccount = document.getElementById('btnUserAccount');
     const btnUserAccountClose = document.getElementById('btnUserAccountClose');
@@ -776,7 +783,7 @@
         });
     });
 
-    // ==================== ATTACH POPUP ====================
+    // ==================== Attach popup ====================
     function createAttachPopup(attachBtn) {
         if (attachBtn._attachPopup) return attachBtn._attachPopup;
         const popup = document.createElement('div');
@@ -856,7 +863,7 @@
     document.getElementById('btnAttachWelcome').addEventListener('click', (e) => { e.stopPropagation(); toggleAttachPopup(document.getElementById('btnAttachWelcome')); });
     document.addEventListener('click', (e) => { if (!e.target.closest('.attach-popup') && !e.target.closest('.icon-btn')) { document.querySelectorAll('.attach-popup').forEach(p => p.classList.add('hidden')); } });
 
-    // ==================== MIC ====================
+    // ==================== Mic ====================
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
     let isListening = false;
