@@ -209,7 +209,7 @@
     const customInstructionsInput = document.getElementById('customInstructions');
     const apiKeyInput = document.getElementById('apiKeyInput');
     const scrollDownBtn = document.getElementById('scrollDownBtn');
-    
+
     // Web Search Toggle Refs
     const btnSearchWelcome = document.getElementById('btnSearchWelcome');
     const btnSearchMain = document.getElementById('btnSearchMain');
@@ -236,7 +236,7 @@
     let apiKey = localStorage.getItem('apiKey') || '';
     let pendingAttachments = [];
     let isWebSearchEnabled = false;
-    
+
     // Centralized Confirmation State
     let pendingConfirmAction = null;
 
@@ -317,7 +317,7 @@ CRITICAL CAPABILITIES & RULES:
     }
 
     // Advanced Markdown parser ensuring code blocks don't get destroyed by <br> conversions
-    window.copyCodeBlock = function(btn) {
+    window.copyCodeBlock = function (btn) {
         const pre = btn.closest('.code-block-wrapper').querySelector('pre');
         const code = pre.textContent; // Pulls text cleanly without html tags
         navigator.clipboard.writeText(code).then(() => {
@@ -332,22 +332,22 @@ CRITICAL CAPABILITIES & RULES:
     function simpleMarkdown(text) {
         if (!text) return '';
         let html = escapeHtml(text);
-        
+
         // Render Images ![alt](url)
         html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%; border-radius:12px; margin-top:8px; display:block;">');
 
         // 1. Extract Code Blocks so we don't mess up their formatting with <p> and <br>
         const codeBlocks = [];
-        html = html.replace(/```(\w*)[ \t]*\r?\n([\s\S]*?)```/g, function(match, lang, code) {
+        html = html.replace(/```(\w*)[ \t]*\r?\n([\s\S]*?)```/g, function (match, lang, code) {
             codeBlocks.push({ lang, code });
-            return `\n\n___CODE_BLOCK_${codeBlocks.length - 1}___\n\n`; 
+            return `\n\n___CODE_BLOCK_${codeBlocks.length - 1}___\n\n`;
         });
-        
+
         // 2. Formatting inline text
         html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
         html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-        
+
         // 3. Process lines and paragraphs
         html = html.split(/\n\n+/).map(p => {
             const trimmed = p.trim();
@@ -356,7 +356,7 @@ CRITICAL CAPABILITIES & RULES:
             if (trimmed.startsWith('<img')) return trimmed; // Ignore image wrappers
             return '<p>' + trimmed.replace(/\n/g, '<br>') + '</p>';
         }).join('');
-        
+
         // 4. Re-inject formatted Code Blocks
         codeBlocks.forEach((block, index) => {
             const languageClass = block.lang ? `language-${block.lang.toLowerCase()}` : 'language-plaintext';
@@ -375,7 +375,7 @@ CRITICAL CAPABILITIES & RULES:
             `;
             html = html.replace(`___CODE_BLOCK_${index}___`, blockHtml);
         });
-        
+
         return html;
     }
 
@@ -403,7 +403,7 @@ CRITICAL CAPABILITIES & RULES:
     function renderAttachments() {
         const previewWelcome = document.getElementById('attachmentPreviewWelcome');
         const previewMain = document.getElementById('attachmentPreviewMain');
-        
+
         const renderTo = (container) => {
             if (!container) return;
             container.innerHTML = '';
@@ -422,7 +422,7 @@ CRITICAL CAPABILITIES & RULES:
                 }
                 container.appendChild(div);
             });
-            
+
             container.querySelectorAll('button').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const idx = parseInt(e.currentTarget.getAttribute('data-idx'));
@@ -432,7 +432,7 @@ CRITICAL CAPABILITIES & RULES:
                 });
             });
         };
-        
+
         renderTo(previewWelcome);
         renderTo(previewMain);
     }
@@ -479,7 +479,7 @@ CRITICAL CAPABILITIES & RULES:
     if (scrollDownBtn) {
         scrollDownBtn.addEventListener('click', scrollToBottom);
     }
-    
+
     // ─── Audio Cleanup / Stop TTS ───
     function stopTTS() {
         if (window.speechSynthesis) {
@@ -502,7 +502,7 @@ CRITICAL CAPABILITIES & RULES:
     function simulateTyping(element, text, role, onComplete) {
         let index = 0;
         element.innerHTML = '';
-        
+
         // Ensure intervals are cleared if multiple calls happen
         if (typingInterval) clearInterval(typingInterval);
 
@@ -532,14 +532,14 @@ CRITICAL CAPABILITIES & RULES:
         const wrapper = document.createElement('div');
         wrapper.className = `message-wrapper ${role === 'user' ? 'user' : 'ai'}`;
         wrapper.setAttribute('data-content', content);
-        
+
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        
+
         let attachmentHtml = '';
         if (attachments && attachments.length > 0) {
             attachmentHtml = '<div class="chat-message-attachments">';
             attachments.forEach(att => {
-                if(att.type.startsWith('image/')) {
+                if (att.type.startsWith('image/')) {
                     attachmentHtml += `<img src="${att.url}" alt="attached image" style="max-width: 240px; max-height: 240px; width: auto; height: auto; object-fit: contain; border-radius: 12px; margin-top: 4px;">`;
                 } else {
                     attachmentHtml += `<div style="background:rgba(0,0,0,0.15); padding:8px 12px; border-radius:8px; display:inline-flex; align-items:center; gap:8px; font-size:0.85rem;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> ${att.name}</div>`;
@@ -607,7 +607,7 @@ CRITICAL CAPABILITIES & RULES:
         } else {
             if (scrollDownBtn) scrollDownBtn.classList.add('visible');
         }
-        
+
         currentConversation.push({ role, content, attachments, timestamp: Date.now() });
 
         if (role === 'user' && !activeConversationId && currentConversation.filter(m => m.role === 'user').length === 1) saveCurrentConversation(true);
@@ -659,7 +659,7 @@ CRITICAL CAPABILITIES & RULES:
         if (!conv) return;
         activeConversationId = convId; currentConversation = [...conv.messages];
         chatArea.innerHTML = ''; typingIndicatorEl = null;
-        
+
         // Re-render historical messages without animation
         currentConversation.forEach(msg => {
             // Check if it's an image from history
@@ -673,9 +673,9 @@ CRITICAL CAPABILITIES & RULES:
 
             appendMessage(msg.role, msg.content, msg.attachments, false, isImage, imgUrl);
             // Quick cleanup of duplicate push from appendMessage
-            currentConversation.pop(); 
+            currentConversation.pop();
         });
-        
+
         welcomeScreen.style.display = 'none'; chatArea.style.display = 'flex';
         setActiveInput('chat'); scrollToBottom(); renderRecentChats();
         localStorage.setItem('activeConversationId', activeConversationId);
@@ -752,7 +752,7 @@ CRITICAL CAPABILITIES & RULES:
                 svg.innerHTML = `<path d="m5 12 7-7 7 7" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 19V5" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
             }
         });
-        
+
         // Ensure buttons stay enabled during generation so we can click STOP
         document.getElementById('btnSend').disabled = false;
         document.getElementById('btnSendWelcome').disabled = false;
@@ -763,7 +763,7 @@ CRITICAL CAPABILITIES & RULES:
         const sendBtn = activeInput === 'welcome' ? btnSendWelcome : btnSend;
         const hasText = inputEl.value.trim().length > 0;
         const hasAttachments = pendingAttachments.length > 0;
-        
+
         if (!isGenerating) {
             sendBtn.disabled = !(hasText || hasAttachments);
         }
@@ -785,7 +785,7 @@ CRITICAL CAPABILITIES & RULES:
         const inputEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
         const sendBtn = activeInput === 'welcome' ? btnSendWelcome : btnSend;
         const text = inputEl.value.trim();
-        
+
         if (!text && pendingAttachments.length === 0) return;
         if (!modelReady && !apiKey) {
             showToast("AI engine not ready. Set API key in Settings or wait.");
@@ -793,7 +793,7 @@ CRITICAL CAPABILITIES & RULES:
         }
 
         inputEl.value = ''; inputEl.style.height = 'auto';
-        
+
         // Format prompt explicitly for attachments if any
         let fullPrompt = text;
         const attachmentsCopy = [...pendingAttachments];
@@ -805,18 +805,18 @@ CRITICAL CAPABILITIES & RULES:
         // ================= AGENTIC ROUTER: Image Generation =================
         // Highly broadened intent matching. Intercepts anything requesting visual creation.
         const isImageIntent = /^(?:can you\s+)?(?:please\s+)?(?:generate|create|make|draw|show(?: me)?).{0,60}(?:image|picture|photo|drawing|pic)/i.test(text);
-        
+
         if (isImageIntent && navigator.onLine) {
-            const imgPrompt = text.trim(); 
+            const imgPrompt = text.trim();
             appendMessage('user', text, attachmentsCopy, false);
             pendingAttachments = []; renderAttachments();
-            
+
             showTypingIndicator(true);
             toggleSendStop(true);
-            
+
             // Pollinations.ai free endpoint parses the entire prompt naturally
             const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(imgPrompt)}?nologo=true`;
-            
+
             const img = new Image();
             img.onload = () => {
                 showTypingIndicator(false);
@@ -875,11 +875,11 @@ CRITICAL CAPABILITIES & RULES:
                                 .catch(() => resolve(""));
                         }
                     });
-                    
+
                     if (searchResults && searchResults.trim() !== "") {
                         finalPromptForLLM = `[Web Search Context: ${searchResults}]\n\nAnswer the user using the above context. User Query: ${text}`;
                     }
-                } catch(e) {
+                } catch (e) {
                     console.warn("Search failed", e);
                     showToast("Web search failed, falling back to local knowledge.");
                 }
@@ -891,10 +891,10 @@ CRITICAL CAPABILITIES & RULES:
             if (apiKey) {
                 const messages = currentConversation.map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }));
                 // Inject our modified search prompt into the final message instead of the plain text
-                messages[messages.length - 1].content = finalPromptForLLM; 
-                
+                messages[messages.length - 1].content = finalPromptForLLM;
+
                 const systemInstruction = customInstructions.trim() ? (MASTER_SYSTEM_PROMPT + "\n\nUser Custom Instructions:\n" + customInstructions.trim()) : MASTER_SYSTEM_PROMPT;
-                
+
                 try {
                     response = await callAIAPI(messages, apiKey, systemInstruction, signal);
                 } catch (apiErr) {
@@ -951,13 +951,13 @@ CRITICAL CAPABILITIES & RULES:
         if (window.AndroidTFLite && typeof window.AndroidTFLite.resetChat === 'function') window.AndroidTFLite.resetChat();
     }
 
-    function clearChat() { 
+    function clearChat() {
         document.getElementById('confirmDialogTitle').textContent = 'Clear all messages?';
         document.getElementById('confirmDialogMessage').textContent = 'This action cannot be undone.';
         pendingConfirmAction = 'clearChat';
-        confirmClearDialog.classList.remove('hidden'); 
+        confirmClearDialog.classList.remove('hidden');
     }
-    
+
     function performClearChat() {
         stopTTS();
         if (activeConversationId) allConversations = allConversations.filter(c => c.id !== activeConversationId);
@@ -968,7 +968,7 @@ CRITICAL CAPABILITIES & RULES:
         persistData();
         if (window.AndroidTFLite && typeof window.AndroidTFLite.resetChat === 'function') window.AndroidTFLite.resetChat();
     }
-    
+
     function performClearCache() {
         stopTTS();
         const keepKeys = ['theme', 'accent', 'apiKey'];
@@ -999,7 +999,7 @@ CRITICAL CAPABILITIES & RULES:
         const speakBtn = e.target.closest('.speak-msg-btn');
         const editBtn = e.target.closest('.edit-msg-btn');
         const downloadBtn = e.target.closest('.download-img-btn');
-        
+
         if (downloadBtn) {
             const url = downloadBtn.getAttribute('data-url');
             downloadImage(url, 'Aethos_Generated_Image_' + Date.now() + '.jpg');
@@ -1010,14 +1010,14 @@ CRITICAL CAPABILITIES & RULES:
             const content = wrapper?.getAttribute('data-content') || '';
             navigator.clipboard.writeText(content).then(() => showToast('Copied', 1500)).catch(() => showToast('Copy failed', 1500));
         }
-        
+
         if (editBtn) {
             stopTTS(); // Explicitly stop audio if user edits the message
-            
+
             const wrapper = editBtn.closest('.message-wrapper');
             let content = wrapper?.getAttribute('data-content') || '';
             if (content === '[Attachment Only]') content = ''; // Clean up fallback text
-            
+
             const activeInputEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
             activeInputEl.value = content;
             activeInputEl.style.height = 'auto';
@@ -1028,12 +1028,12 @@ CRITICAL CAPABILITIES & RULES:
             // Slicing logic: remove this message and everything after it
             const wrappers = Array.from(chatArea.querySelectorAll('.message-wrapper'));
             const index = wrappers.indexOf(wrapper);
-            
+
             if (index !== -1) {
                 if (index === 0 && wrappers.length <= 2) {
                     // It's basically a new chat again
                 }
-                
+
                 for (let i = wrappers.length - 1; i >= index; i--) {
                     wrappers[i].remove();
                 }
@@ -1045,61 +1045,61 @@ CRITICAL CAPABILITIES & RULES:
         if (speakBtn) {
             const wrapper = speakBtn.closest('.message-wrapper');
             const content = wrapper?.getAttribute('data-content') || '';
-            
+
             // OFFLINE TTS BRIDGE CALL
             if (window.PiperTTS && typeof window.PiperTTS.speak === 'function') {
                 stopTTS(); // Clean state before new speech
-                
+
                 currentUtterance = { _isPiper: true };
                 audioPlayer.classList.remove('hidden');
                 audioProgressFill.style.width = '0%';
                 audioIconPlay.style.display = 'none';
                 audioIconPause.style.display = 'block';
                 speakBtn.classList.add('speaking');
-                
+
                 window.PiperTTS.speak(content);
 
                 let simulatedProgress = 0;
-                let expectedDuration = (content.length / 15) * 1000; 
+                let expectedDuration = (content.length / 15) * 1000;
                 let intervalTime = 100;
                 let increment = (intervalTime / expectedDuration) * 100;
-                
+
                 currentUtterance._progressInterval = setInterval(() => {
                     simulatedProgress += increment;
-                    if (simulatedProgress > 95) simulatedProgress = 95; 
+                    if (simulatedProgress > 95) simulatedProgress = 95;
                     audioProgressFill.style.width = `${simulatedProgress}%`;
                 }, intervalTime);
-                
+
                 // Auto close fallback for offline TTS
                 setTimeout(() => {
                     if (currentUtterance && currentUtterance._isPiper) {
                         stopTTS();
                     }
                 }, expectedDuration + 2000);
-                
+
             } else if (window.speechSynthesis) {
                 stopTTS(); // Clean state before new speech
-                
+
                 currentUtterance = new SpeechSynthesisUtterance(content);
-                const totalLength = content.length || 1; 
+                const totalLength = content.length || 1;
 
                 audioPlayer.classList.remove('hidden');
                 audioProgressFill.style.width = '0%';
                 audioIconPlay.style.display = 'none';
                 audioIconPause.style.display = 'block';
-                
+
                 currentUtterance.onstart = () => {
                     speakBtn.classList.add('speaking');
-                    
+
                     // Fallback simulated progress for Android WebView where onboundary might fail
                     let simulatedProgress = 0;
-                    let expectedDuration = (content.length / 15) * 1000; 
+                    let expectedDuration = (content.length / 15) * 1000;
                     let intervalTime = 100;
                     let increment = (intervalTime / expectedDuration) * 100;
-                    
+
                     currentUtterance._progressInterval = setInterval(() => {
                         simulatedProgress += increment;
-                        if (simulatedProgress > 95) simulatedProgress = 95; 
+                        if (simulatedProgress > 95) simulatedProgress = 95;
                         audioProgressFill.style.width = `${simulatedProgress}%`;
                     }, intervalTime);
                 };
@@ -1128,7 +1128,7 @@ CRITICAL CAPABILITIES & RULES:
                 showToast('Speech synthesis not supported');
             }
         }
-        
+
         const activeInputEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
         if (activeInputEl && (document.activeElement === welcomeUserInput || document.activeElement === userInput)) {
             setTimeout(() => {
@@ -1194,9 +1194,9 @@ CRITICAL CAPABILITIES & RULES:
         confirmClearDialog.classList.add('hidden');
         pendingConfirmAction = null;
     });
-    
-    document.getElementById('confirmClearOk').addEventListener('click', () => { 
-        confirmClearDialog.classList.add('hidden'); 
+
+    document.getElementById('confirmClearOk').addEventListener('click', () => {
+        confirmClearDialog.classList.add('hidden');
         if (pendingConfirmAction === 'clearChat') {
             performClearChat();
             showToast('Chat cleared');
@@ -1216,16 +1216,16 @@ CRITICAL CAPABILITIES & RULES:
             if (!sendBtn.disabled || isGenerating) sendMessage();
         }
     }
-    
+
     welcomeUserInput.addEventListener('keydown', e => handleEnterKey(e, welcomeUserInput));
     userInput.addEventListener('keydown', e => handleEnterKey(e, userInput));
 
-    welcomeUserInput.addEventListener('input', function () { 
-        this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 120) + 'px'; 
+    welcomeUserInput.addEventListener('input', function () {
+        this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         toggleSendButtonState();
     });
-    userInput.addEventListener('input', function () { 
-        this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 120) + 'px'; 
+    userInput.addEventListener('input', function () {
+        this.style.height = 'auto'; this.style.height = Math.min(this.scrollHeight, 120) + 'px';
         toggleSendButtonState();
     });
 
@@ -1245,17 +1245,17 @@ CRITICAL CAPABILITIES & RULES:
         sidebar.classList.add('open');
         overlay.classList.add('active');
     }
-    
+
     function closeSidebar() {
         sidebar.classList.remove('open');
         overlay.classList.remove('active');
     }
 
     document.getElementById('sidebarExpandBtn').addEventListener('click', (e) => {
-        e.stopPropagation(); 
+        e.stopPropagation();
         openSidebar();
     });
-    
+
     overlay.addEventListener('click', closeSidebar);
     desktopSidebarToggle.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1281,12 +1281,12 @@ CRITICAL CAPABILITIES & RULES:
 
             // Relaxed swipe logic: Horizontal distance must be greater than vertical, and exceed 40px
             if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
-                
+
                 // FIX: Close keyboard if an input is focused during a swipe
                 if (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {
                     document.activeElement.blur();
                 }
-                
+
                 const isOpen = sidebar.classList.contains('open');
                 const isMessage = e.target.closest('.message-wrapper');
 
@@ -1381,7 +1381,7 @@ CRITICAL CAPABILITIES & RULES:
             input.addEventListener('change', (e) => {
                 const files = e.target.files;
                 if (!files || files.length === 0) return;
-                
+
                 Array.from(files).forEach(file => {
                     const reader = new FileReader();
                     reader.onload = (ev) => {

@@ -78,14 +78,27 @@
         <main id="main">
             <div id="audioPlayer" class="audio-player hidden">
                 <button id="audioPlayPauseBtn" class="audio-btn">
-                    <svg id="audioIconPlay" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-play-icon lucide-play" style="display:none;"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></svg>
-                    <svg id="audioIconPause" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pause-icon lucide-pause"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></svg>
+                    <svg id="audioIconPlay" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" class="lucide lucide-play-icon lucide-play" style="display:none;">
+                        <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+                    </svg>
+                    <svg id="audioIconPause" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" class="lucide lucide-pause-icon lucide-pause">
+                        <rect x="14" y="3" width="5" height="18" rx="1" />
+                        <rect x="5" y="3" width="5" height="18" rx="1" />
+                    </svg>
                 </button>
                 <div class="audio-progress-bar">
                     <div id="audioProgressFill" class="audio-progress-fill"></div>
                 </div>
                 <button id="audioCloseBtn" class="audio-btn">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 6 6 18" />
+                        <path d="m6 6 12 12" />
+                    </svg>
                 </button>
             </div>
 
@@ -209,14 +222,15 @@
                                 <path d="M12 5v14M5 12h14" />
                             </svg>
                         </button>
-                        
+
                         <button class="search-toggle-btn" id="btnSearchWelcome" title="Toggle Web Search">
                             Search
                         </button>
 
                         <textarea id="welcomeUserInput" rows="1" placeholder="Ask Aethos"></textarea>
                         <button class="icon-btn" id="btnMicWelcome" title="Voice input">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
                                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                                 <line x1="12" y1="19" x2="12" y2="23" />
@@ -252,14 +266,15 @@
                             <path d="M12 5v14M5 12h14" />
                         </svg>
                     </button>
-                    
+
                     <button class="search-toggle-btn" id="btnSearchMain" title="Toggle Web Search">
                         Search
                     </button>
 
                     <textarea id="userInput" rows="1" placeholder="Ask Aethos..."></textarea>
                     <button class="icon-btn" id="btnMic" title="Voice input">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
                             <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                             <line x1="12" y1="19" x2="12" y2="23" />
@@ -368,12 +383,12 @@
     </div>
 
     <div id="toast"></div>
-    
+
     <script src="CDN/prism.min.js"></script>
     <script src="CDN/prism-python.min.js"></script>
     <script src="CDN/prism-javascript.min.js"></script>
     <script src="CDN/prism-css.min.js"></script>
-    
+
     <script src="script.js"></script>
 </body>
 
