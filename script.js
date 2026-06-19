@@ -248,6 +248,16 @@
     // Auto-scroll state
     let autoScroll = true;
 
+    // ==================== MASTER AI SYSTEM PROMPT ====================
+    // Heavily upgraded behavior control to prevent hallucinations, image generation loops, and improve local model logic.
+    const MASTER_SYSTEM_PROMPT = `You are Aethos AI, an advanced, highly intelligent assistant.
+CRITICAL CAPABILITIES & RULES:
+1. IMAGE GENERATION: The system has a built-in image generator. If the user asks you to create, generate, or draw an image, YOU MUST reply EXACTLY with: "I can do that! Please start your next prompt with 'Generate an image of...' so my visual engine can process it." DO NOT attempt to describe the image yourself. DO NOT ask "Would you like me to generate it now?". YOU MUST NEVER pretend you are drawing it.
+2. WEB SEARCH: You have real-time internet access via integrated tools. If the user asks about current events, answer factually using the provided Web Search Context. 
+3. NEVER say "As a text-based AI, I cannot..." or "I don't have internet access." You possess these capabilities.
+4. REASONING: Think step-by-step for complex queries. Be concise but highly accurate. Break down complex tasks logically.
+5. FORMATTING: Use Markdown for all formatting (bolding, lists, code blocks). Do not prefix your replies with "Aethos:" or "Assistant:".`;
+
     // Persistence helpers
     function persistData() {
         localStorage.setItem('allConversations', JSON.stringify(allConversations));
@@ -712,8 +722,7 @@
     }
 
     function buildLocalPrompt(newUserMessage) {
-        const defaultSystem = 'You are Aethos AI, a helpful, concise assistant. Answer directly and never invent questions or unrelated text. Do not write "User:" or "Assistant:" in your response.';
-        const systemPrompt = customInstructions.trim() || defaultSystem;
+        const systemPrompt = customInstructions.trim() ? (MASTER_SYSTEM_PROMPT + "\n\nUser Custom Instructions:\n" + customInstructions.trim()) : MASTER_SYSTEM_PROMPT;
 
         let prompt = '<|begin_of_text|>';
         prompt += `<|start_header_id|>system<|end_header_id|>\n${systemPrompt}<|eot_id|>`;
@@ -794,16 +803,18 @@
         }
 
         // ================= AGENTIC ROUTER: Image Generation =================
-        const imgMatch = text.match(/^(generate|create|make|draw)\s+(an?|the)?\s*(image|picture|photo|drawing)\s+of\s+(.+)/i);
-        if (imgMatch && navigator.onLine) {
-            const imgPrompt = imgMatch[4];
+        // Highly broadened intent matching. Intercepts anything requesting visual creation.
+        const isImageIntent = /^(?:can you\s+)?(?:please\s+)?(?:generate|create|make|draw|show(?: me)?).{0,60}(?:image|picture|photo|drawing|pic)/i.test(text);
+        
+        if (isImageIntent && navigator.onLine) {
+            const imgPrompt = text.trim(); 
             appendMessage('user', text, attachmentsCopy, false);
             pendingAttachments = []; renderAttachments();
             
             showTypingIndicator(true);
             toggleSendStop(true);
             
-            // Pollinations.ai free endpoint
+            // Pollinations.ai free endpoint parses the entire prompt naturally
             const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(imgPrompt)}?nologo=true`;
             
             const img = new Image();
@@ -821,7 +832,7 @@
             };
             img.src = imgUrl;
             return; // Stop further processing
-        } else if (imgMatch && !navigator.onLine) {
+        } else if (isImageIntent && !navigator.onLine) {
             showToast("Internet connection required to generate images.");
         }
 
@@ -882,7 +893,8 @@
                 // Inject our modified search prompt into the final message instead of the plain text
                 messages[messages.length - 1].content = finalPromptForLLM; 
                 
-                const systemInstruction = customInstructions.trim() || null;
+                const systemInstruction = customInstructions.trim() ? (MASTER_SYSTEM_PROMPT + "\n\nUser Custom Instructions:\n" + customInstructions.trim()) : MASTER_SYSTEM_PROMPT;
+                
                 try {
                     response = await callAIAPI(messages, apiKey, systemInstruction, signal);
                 } catch (apiErr) {
