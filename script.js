@@ -209,6 +209,10 @@
     const customInstructionsInput = document.getElementById('customInstructions');
     const apiKeyInput = document.getElementById('apiKeyInput');
     const scrollDownBtn = document.getElementById('scrollDownBtn');
+    
+    // Web Search Toggle Refs
+    const btnSearchWelcome = document.getElementById('btnSearchWelcome');
+    const btnSearchMain = document.getElementById('btnSearchMain');
 
     // Audio Player Refs
     const audioPlayer = document.getElementById('audioPlayer');
@@ -231,6 +235,7 @@
     let customInstructions = localStorage.getItem('customInstructions') || '';
     let apiKey = localStorage.getItem('apiKey') || '';
     let pendingAttachments = [];
+    let isWebSearchEnabled = false;
     
     // Centralized Confirmation State
     let pendingConfirmAction = null;
@@ -318,6 +323,9 @@
         if (!text) return '';
         let html = escapeHtml(text);
         
+        // Render Images ![alt](url)
+        html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%; border-radius:12px; margin-top:8px; display:block;">');
+
         // 1. Extract Code Blocks so we don't mess up their formatting with <p> and <br>
         const codeBlocks = [];
         html = html.replace(/```(\w*)[ \t]*\r?\n([\s\S]*?)```/g, function(match, lang, code) {
@@ -335,6 +343,7 @@
             const trimmed = p.trim();
             if (!trimmed) return '';
             if (trimmed.startsWith('___CODE_BLOCK_')) return trimmed; // Ignore code placeholders
+            if (trimmed.startsWith('<img')) return trimmed; // Ignore image wrappers
             return '<p>' + trimmed.replace(/\n/g, '<br>') + '</p>';
         }).join('');
         
@@ -358,6 +367,26 @@
         });
         
         return html;
+    }
+
+    // Image download utility
+    async function downloadImage(url, filename) {
+        try {
+            showToast('Downloading image...');
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objectUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(objectUrl);
+        } catch (e) {
+            showToast('Download failed, opening in new tab.');
+            window.open(url, '_blank');
+        }
     }
 
     // ─── Attachments Rendering ───
@@ -397,6 +426,20 @@
         renderTo(previewWelcome);
         renderTo(previewMain);
     }
+
+    // ─── Web Search Toggle Logic ───
+    function toggleWebSearch() {
+        if (!navigator.onLine) {
+            showToast('Internet connection required for Web Search');
+            return;
+        }
+        isWebSearchEnabled = !isWebSearchEnabled;
+        btnSearchWelcome.classList.toggle('active', isWebSearchEnabled);
+        btnSearchMain.classList.toggle('active', isWebSearchEnabled);
+        showToast(isWebSearchEnabled ? 'Web Search Enabled' : 'Web Search Disabled');
+    }
+    btnSearchWelcome.addEventListener('click', toggleWebSearch);
+    btnSearchMain.addEventListener('click', toggleWebSearch);
 
     // ─── Auto-scroll control ───
     function updateScrollState() {
@@ -469,8 +512,8 @@
         }, 15);
     }
 
-    // ─── Message rendering ───
-    function appendMessage(role, content, attachments = [], animate = false) {
+    // ─── Message rendering (Updated for Image Hide Logic) ───
+    function appendMessage(role, content, attachments = [], animate = false, isImage = false, generatedImgUrl = '') {
         if (welcomeScreen.style.display !== 'none') {
             welcomeScreen.style.display = 'none';
             chatArea.style.display = 'flex';
@@ -495,12 +538,36 @@
             attachmentHtml += '</div>';
         }
 
-        // Action Buttons with Strictly constrained SVGs
-        const editActionHtml = role === 'user' ? `
-            <button class="edit-msg-btn" title="Edit message">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
-            </button>
-        ` : '';
+        // Action Buttons Setup (Download if image, standard buttons otherwise)
+        let actionButtonsHtml = '';
+        if (isImage) {
+            actionButtonsHtml = `
+                <button class="download-img-btn" data-url="${generatedImgUrl}" title="Download Image">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-download-icon lucide-download"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+                </button>
+            `;
+        } else if (role === 'user') {
+            actionButtonsHtml = `
+                <button class="edit-msg-btn" title="Edit message">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+                </button>
+                <button class="copy-msg-btn" title="Copy message">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                </button>
+                <button class="speak-msg-btn" title="Read aloud">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>
+                </button>
+            `;
+        } else {
+            actionButtonsHtml = `
+                <button class="copy-msg-btn" title="Copy message">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                </button>
+                <button class="speak-msg-btn" title="Read aloud">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>
+                </button>
+            `;
+        }
 
         wrapper.innerHTML = `
             <div class="message ${role === 'user' ? 'user-message' : 'ai-message'}">
@@ -509,13 +576,7 @@
                 <div class="message-footer"><span class="message-time">${time}</span></div>
             </div>
             <div class="msg-actions">
-                ${editActionHtml}
-                <button class="copy-msg-btn" title="Copy message">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                </button>
-                <button class="speak-msg-btn" title="Read aloud">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>
-                </button>
+                ${actionButtonsHtml}
             </div>
         `;
         chatArea.appendChild(wrapper);
@@ -591,7 +652,16 @@
         
         // Re-render historical messages without animation
         currentConversation.forEach(msg => {
-            appendMessage(msg.role, msg.content, msg.attachments, false);
+            // Check if it's an image from history
+            let isImage = false;
+            let imgUrl = '';
+            if (msg.role === 'ai' && msg.content.includes('Here is your image:') && msg.content.includes('![')) {
+                isImage = true;
+                const match = msg.content.match(/\((https:\/\/image\.pollinations\.ai[^)]+)\)/);
+                if (match) imgUrl = match[1];
+            }
+
+            appendMessage(msg.role, msg.content, msg.attachments, false, isImage, imgUrl);
             // Quick cleanup of duplicate push from appendMessage
             currentConversation.pop(); 
         });
@@ -723,11 +793,41 @@
             fullPrompt += `\n[User attached files: ${filesStr}]`;
         }
 
+        // ================= AGENTIC ROUTER: Image Generation =================
+        const imgMatch = text.match(/^(generate|create|make|draw)\s+(an?|the)?\s*(image|picture|photo|drawing)\s+of\s+(.+)/i);
+        if (imgMatch && navigator.onLine) {
+            const imgPrompt = imgMatch[4];
+            appendMessage('user', text, attachmentsCopy, false);
+            pendingAttachments = []; renderAttachments();
+            
+            showTypingIndicator(true);
+            toggleSendStop(true);
+            
+            // Pollinations.ai free endpoint
+            const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(imgPrompt)}?nologo=true`;
+            
+            const img = new Image();
+            img.onload = () => {
+                showTypingIndicator(false);
+                // Append message with isImage = true, and pass the URL
+                appendMessage('ai', `Here is your image:\n\n![${escapeHtml(imgPrompt)}](${imgUrl})`, [], true, true, imgUrl);
+                toggleSendStop(false);
+                saveCurrentConversation(false);
+            };
+            img.onerror = () => {
+                showTypingIndicator(false);
+                appendMessage('ai', `⚠️ Sorry, I couldn't generate the image.`, [], true);
+                toggleSendStop(false);
+            };
+            img.src = imgUrl;
+            return; // Stop further processing
+        } else if (imgMatch && !navigator.onLine) {
+            showToast("Internet connection required to generate images.");
+        }
+
+        // Proceed to append regular message
         appendMessage('user', text || '[Attachment Only]', attachmentsCopy, false);
-        
-        // Clear pending
-        pendingAttachments = [];
-        renderAttachments();
+        pendingAttachments = []; renderAttachments();
 
         autoScroll = true;
         showTypingIndicator(true);
@@ -737,9 +837,51 @@
         const signal = globalAbortController.signal;
 
         try {
+            let finalPromptForLLM = fullPrompt;
+
+            // ================= AGENTIC ROUTER: Web Search Context =================
+            if (isWebSearchEnabled && navigator.onLine) {
+                showToast("Searching the web...");
+                try {
+                    // Call the Android Bridge for free web search
+                    const searchResults = await new Promise((resolve, reject) => {
+                        if (window.AndroidTFLite && window.AndroidTFLite.performWebSearch) {
+                            const callbackId = 'search_' + Date.now();
+                            pendingCallbacks[callbackId] = resolve;
+                            window.AndroidTFLite.performWebSearch(text, callbackId);
+                        } else {
+                            // FALLBACK: Pure JS Wikipedia scraper for PC/Browser preview where Android is unavailable
+                            const cleanQuery = text.replace(/(what is|who is|where is|tell me about|the) /gi, "").trim();
+                            fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&origin=*&search=${encodeURIComponent(cleanQuery)}&limit=2&namespace=0&format=json`)
+                                .then(res => res.json())
+                                .then(data => {
+                                    if (data && data.length > 2 && data[2].length > 0) {
+                                        resolve("- " + data[2].join("\n- "));
+                                    } else {
+                                        resolve("");
+                                    }
+                                })
+                                .catch(() => resolve(""));
+                        }
+                    });
+                    
+                    if (searchResults && searchResults.trim() !== "") {
+                        finalPromptForLLM = `[Web Search Context: ${searchResults}]\n\nAnswer the user using the above context. User Query: ${text}`;
+                    }
+                } catch(e) {
+                    console.warn("Search failed", e);
+                    showToast("Web search failed, falling back to local knowledge.");
+                }
+            } else if (isWebSearchEnabled && !navigator.onLine) {
+                showToast("Offline. Bypassing Web Search.");
+            }
+
             let response;
             if (apiKey) {
                 const messages = currentConversation.map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }));
+                // Inject our modified search prompt into the final message instead of the plain text
+                messages[messages.length - 1].content = finalPromptForLLM; 
+                
                 const systemInstruction = customInstructions.trim() || null;
                 try {
                     response = await callAIAPI(messages, apiKey, systemInstruction, signal);
@@ -749,7 +891,7 @@
                     if (modelReady && window.AndroidTFLite) {
                         showToast('API error, trying local model...');
                         response = await new Promise((resolve, reject) => {
-                            askLocalLLM(buildLocalPrompt(fullPrompt), resolve, reject);
+                            askLocalLLM(buildLocalPrompt(finalPromptForLLM), resolve, reject);
                         });
                     } else {
                         throw new Error(`API call failed: ${apiErr.message}`);
@@ -758,7 +900,7 @@
             } else {
                 if (!modelReady || !window.AndroidTFLite) throw new Error('Local model not ready');
                 response = await new Promise((resolve, reject) => {
-                    askLocalLLM(buildLocalPrompt(fullPrompt), resolve, reject);
+                    askLocalLLM(buildLocalPrompt(finalPromptForLLM), resolve, reject);
                 });
             }
             showTypingIndicator(false);
@@ -839,12 +981,18 @@
         URL.revokeObjectURL(url); showToast('Chat exported');
     }
 
-    // Message Actions (Copy, Speak, Edit)
+    // Message Actions (Copy, Speak, Edit, Download)
     chatArea.addEventListener('click', (e) => {
         const copyBtn = e.target.closest('.copy-msg-btn');
         const speakBtn = e.target.closest('.speak-msg-btn');
         const editBtn = e.target.closest('.edit-msg-btn');
+        const downloadBtn = e.target.closest('.download-img-btn');
         
+        if (downloadBtn) {
+            const url = downloadBtn.getAttribute('data-url');
+            downloadImage(url, 'Aethos_Generated_Image_' + Date.now() + '.jpg');
+        }
+
         if (copyBtn) {
             const wrapper = copyBtn.closest('.message-wrapper');
             const content = wrapper?.getAttribute('data-content') || '';

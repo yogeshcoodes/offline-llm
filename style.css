@@ -979,7 +979,8 @@ code[class*="language-"], pre[class*="language-"] {
 
 .copy-msg-btn,
 .speak-msg-btn,
-.edit-msg-btn {
+.edit-msg-btn,
+.download-img-btn {
     background: none;
     border: none;
     cursor: pointer;
@@ -996,7 +997,8 @@ code[class*="language-"], pre[class*="language-"] {
 
 .copy-msg-btn:hover,
 .speak-msg-btn:hover,
-.edit-msg-btn:hover {
+.edit-msg-btn:hover,
+.download-img-btn:hover {
     opacity: 1 !important;
     color: var(--primary);
 }
@@ -1138,7 +1140,42 @@ code[class*="language-"], pre[class*="language-"] {
 /* Ordering the input controls perfectly inline */
 #btnAttach, #btnAttachWelcome {
     order: 2 !important;
-    margin-right: auto !important;
+    margin-right: 4px !important;
+}
+
+#btnSearchWelcome, #btnSearchMain {
+    order: 2 !important;
+    margin-right: auto !important; /* Pushes mic/send to the right */
+}
+
+/* Text Pill Search Button styling */
+.search-toggle-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    padding: 0 14px;
+    border-radius: 20px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    height: 36px;
+    margin-bottom: 2px;
+    font-family: inherit;
+}
+
+.search-toggle-btn:hover {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
+.search-toggle-btn.active {
+    background: var(--primary-light);
+    color: var(--primary);
+    border-color: var(--primary);
 }
 
 textarea {
@@ -1190,7 +1227,6 @@ textarea {
     background: var(--primary-light);
     color: var(--primary);
 }
-
 
 #btnSend:disabled,
 #btnSendWelcome:disabled {
