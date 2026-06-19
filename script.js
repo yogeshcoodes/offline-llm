@@ -231,6 +231,9 @@
     let customInstructions = localStorage.getItem('customInstructions') || '';
     let apiKey = localStorage.getItem('apiKey') || '';
     let pendingAttachments = [];
+    
+    // Centralized Confirmation State
+    let pendingConfirmAction = null;
 
     // Abort Logic & Streaming
     let globalAbortController = null;
@@ -423,6 +426,24 @@
     if (scrollDownBtn) {
         scrollDownBtn.addEventListener('click', scrollToBottom);
     }
+    
+    // ─── Audio Cleanup / Stop TTS ───
+    function stopTTS() {
+        if (window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+        }
+        if (window.PiperTTS && typeof window.PiperTTS.stop === 'function') {
+            window.PiperTTS.stop();
+        }
+        audioPlayer.classList.add('hidden');
+        audioProgressFill.style.width = '0%';
+        document.querySelectorAll('.speaking').forEach(el => el.classList.remove('speaking'));
+        if (currentUtterance && currentUtterance._progressInterval) {
+            clearInterval(currentUtterance._progressInterval);
+            clearTimeout(currentUtterance._progressInterval);
+        }
+        currentUtterance = null;
+    }
 
     // ─── Simulated Streaming Effect (Cursor line completely removed) ───
     function simulateTyping(element, text, role, onComplete) {
@@ -561,6 +582,7 @@
     }
 
     function loadConversation(convId) {
+        stopTTS();
         if (activeConversationId && currentConversation.length > 0) saveCurrentConversation(false);
         const conv = allConversations.find(c => c.id === convId);
         if (!conv) return;
@@ -581,6 +603,7 @@
 
     function deleteConversation(convId, e) {
         e.stopPropagation();
+        stopTTS();
         allConversations = allConversations.filter(c => c.id !== convId);
         if (activeConversationId === convId) {
             activeConversationId = null; currentConversation = []; chatArea.innerHTML = ''; typingIndicatorEl = null;
@@ -643,7 +666,7 @@
         const svgs = document.querySelectorAll('#btnSend svg, #btnSendWelcome svg');
         svgs.forEach(svg => {
             if (generating) {
-                // Stop Square Icon - increased width/height and adjusted x/y to keep it centered
+                // Stop Square Icon
                 svg.innerHTML = `<rect x="6" y="6" width="12" height="12" rx="2" ry="2" fill="currentColor" stroke="currentColor" stroke-width="2"/>`;
             } else {
                 // Send Icon
@@ -679,6 +702,7 @@
             return;
         }
 
+        stopTTS(); // Clean up audio on new user msg
         const inputEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
         const sendBtn = activeInput === 'welcome' ? btnSendWelcome : btnSend;
         const text = inputEl.value.trim();
@@ -763,6 +787,7 @@
             isGenerating = false;
             toggleSendStop(false);
         }
+        stopTTS();
         if (currentConversation.length > 0) saveCurrentConversation(false);
         activeConversationId = null; currentConversation = []; chatArea.innerHTML = ''; typingIndicatorEl = null;
         welcomeScreen.style.display = 'flex'; chatArea.style.display = 'none';
@@ -772,8 +797,15 @@
         if (window.AndroidTFLite && typeof window.AndroidTFLite.resetChat === 'function') window.AndroidTFLite.resetChat();
     }
 
-    function clearChat() { confirmClearDialog.classList.remove('hidden'); }
+    function clearChat() { 
+        document.getElementById('confirmDialogTitle').textContent = 'Clear all messages?';
+        document.getElementById('confirmDialogMessage').textContent = 'This action cannot be undone.';
+        pendingConfirmAction = 'clearChat';
+        confirmClearDialog.classList.remove('hidden'); 
+    }
+    
     function performClearChat() {
+        stopTTS();
         if (activeConversationId) allConversations = allConversations.filter(c => c.id !== activeConversationId);
         activeConversationId = null; currentConversation = []; chatArea.innerHTML = ''; typingIndicatorEl = null;
         welcomeScreen.style.display = 'flex'; chatArea.style.display = 'none';
@@ -781,6 +813,21 @@
         renderRecentChats();
         persistData();
         if (window.AndroidTFLite && typeof window.AndroidTFLite.resetChat === 'function') window.AndroidTFLite.resetChat();
+    }
+    
+    function performClearCache() {
+        stopTTS();
+        const keepKeys = ['theme', 'accent', 'apiKey'];
+        Object.keys(localStorage).forEach(key => { if (!keepKeys.includes(key)) localStorage.removeItem(key); });
+        allConversations = []; activeConversationId = null; currentConversation = [];
+        customInstructions = ''; customInstructionsInput.value = '';
+        apiKeyInput.value = localStorage.getItem('apiKey') || ''; apiKey = localStorage.getItem('apiKey') || '';
+        chatArea.innerHTML = ''; typingIndicatorEl = null;
+        welcomeScreen.style.display = 'flex'; chatArea.style.display = 'none';
+        welcomeUserInput.value = ''; userInput.value = '';
+        setActiveInput('welcome'); renderRecentChats();
+        persistData();
+        showToast('Cache cleared');
     }
 
     function exportChat() {
@@ -805,6 +852,8 @@
         }
         
         if (editBtn) {
+            stopTTS(); // Explicitly stop audio if user edits the message
+            
             const wrapper = editBtn.closest('.message-wrapper');
             let content = wrapper?.getAttribute('data-content') || '';
             if (content === '[Attachment Only]') content = ''; // Clean up fallback text
@@ -821,7 +870,6 @@
             const index = wrappers.indexOf(wrapper);
             
             if (index !== -1) {
-                // If the user is currently editing the *very first* message, we drop back to welcome screen if needed
                 if (index === 0 && wrappers.length <= 2) {
                     // It's basically a new chat again
                 }
@@ -840,10 +888,37 @@
             
             // OFFLINE TTS BRIDGE CALL
             if (window.PiperTTS && typeof window.PiperTTS.speak === 'function') {
+                stopTTS(); // Clean state before new speech
+                
+                currentUtterance = { _isPiper: true };
+                audioPlayer.classList.remove('hidden');
+                audioProgressFill.style.width = '0%';
+                audioIconPlay.style.display = 'none';
+                audioIconPause.style.display = 'block';
+                speakBtn.classList.add('speaking');
+                
                 window.PiperTTS.speak(content);
+
+                let simulatedProgress = 0;
+                let expectedDuration = (content.length / 15) * 1000; 
+                let intervalTime = 100;
+                let increment = (intervalTime / expectedDuration) * 100;
+                
+                currentUtterance._progressInterval = setInterval(() => {
+                    simulatedProgress += increment;
+                    if (simulatedProgress > 95) simulatedProgress = 95; 
+                    audioProgressFill.style.width = `${simulatedProgress}%`;
+                }, intervalTime);
+                
+                // Auto close fallback for offline TTS
+                setTimeout(() => {
+                    if (currentUtterance && currentUtterance._isPiper) {
+                        stopTTS();
+                    }
+                }, expectedDuration + 2000);
+                
             } else if (window.speechSynthesis) {
-                window.speechSynthesis.cancel();
-                document.querySelectorAll('.speaking').forEach(el => el.classList.remove('speaking'));
+                stopTTS(); // Clean state before new speech
                 
                 currentUtterance = new SpeechSynthesisUtterance(content);
                 const totalLength = content.length || 1; 
@@ -855,9 +930,26 @@
                 
                 currentUtterance.onstart = () => {
                     speakBtn.classList.add('speaking');
+                    
+                    // Fallback simulated progress for Android WebView where onboundary might fail
+                    let simulatedProgress = 0;
+                    let expectedDuration = (content.length / 15) * 1000; 
+                    let intervalTime = 100;
+                    let increment = (intervalTime / expectedDuration) * 100;
+                    
+                    currentUtterance._progressInterval = setInterval(() => {
+                        simulatedProgress += increment;
+                        if (simulatedProgress > 95) simulatedProgress = 95; 
+                        audioProgressFill.style.width = `${simulatedProgress}%`;
+                    }, intervalTime);
                 };
 
                 currentUtterance.onboundary = (event) => {
+                    // If true onboundary fires, stop the simulation
+                    if (currentUtterance && currentUtterance._progressInterval) {
+                        clearInterval(currentUtterance._progressInterval);
+                        currentUtterance._progressInterval = null;
+                    }
                     if (event.name === 'word') {
                         const progressPercentage = (event.charIndex / totalLength) * 100;
                         audioProgressFill.style.width = `${Math.min(progressPercentage, 100)}%`;
@@ -865,10 +957,7 @@
                 };
 
                 const finishAudio = () => {
-                    speakBtn.classList.remove('speaking');
-                    audioPlayer.classList.add('hidden');
-                    audioProgressFill.style.width = '0%';
-                    currentUtterance = null;
+                    stopTTS();
                 };
 
                 currentUtterance.onend = finishAudio;
@@ -904,15 +993,7 @@
         }
     });
 
-    audioCloseBtn.addEventListener('click', () => {
-        if (window.speechSynthesis) {
-            window.speechSynthesis.cancel();
-        }
-        audioPlayer.classList.add('hidden');
-        audioProgressFill.style.width = '0%';
-        document.querySelectorAll('.speaking').forEach(el => el.classList.remove('speaking'));
-        currentUtterance = null;
-    });
+    audioCloseBtn.addEventListener('click', stopTTS);
 
     function closeAllDropdowns() { dropdownMenu.classList.add('hidden'); mobileDropdownMenu.classList.add('hidden'); }
     desktopMenuBtn.addEventListener('click', (e) => { e.stopPropagation(); dropdownMenu.classList.toggle('hidden'); mobileDropdownMenu.classList.add('hidden'); });
@@ -949,8 +1030,21 @@
     desktopNewChatBtn.addEventListener('click', newChat);
     mobileNewChatBtn.addEventListener('click', () => { newChat(); if (window.innerWidth <= 768) { closeSidebar(); } });
 
-    document.getElementById('confirmClearCancel').addEventListener('click', () => confirmClearDialog.classList.add('hidden'));
-    document.getElementById('confirmClearOk').addEventListener('click', () => { confirmClearDialog.classList.add('hidden'); performClearChat(); showToast('Chat cleared'); });
+    document.getElementById('confirmClearCancel').addEventListener('click', () => {
+        confirmClearDialog.classList.add('hidden');
+        pendingConfirmAction = null;
+    });
+    
+    document.getElementById('confirmClearOk').addEventListener('click', () => { 
+        confirmClearDialog.classList.add('hidden'); 
+        if (pendingConfirmAction === 'clearChat') {
+            performClearChat();
+            showToast('Chat cleared');
+        } else if (pendingConfirmAction === 'clearCache') {
+            performClearCache();
+        }
+        pendingConfirmAction = null;
+    });
 
     btnSend.addEventListener('click', sendMessage);
     btnSendWelcome.addEventListener('click', sendMessage);
@@ -1027,6 +1121,12 @@
 
             // Relaxed swipe logic: Horizontal distance must be greater than vertical, and exceed 40px
             if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                
+                // FIX: Close keyboard if an input is focused during a swipe
+                if (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {
+                    document.activeElement.blur();
+                }
+                
                 const isOpen = sidebar.classList.contains('open');
                 const isMessage = e.target.closest('.message-wrapper');
 
@@ -1247,39 +1347,10 @@
         clearCacheBtn.textContent = 'Clear Cache';
         clearCacheBtn.style.marginTop = '16px'; clearCacheBtn.style.width = '100%';
         clearCacheBtn.addEventListener('click', () => {
-            const confirmTitle = document.getElementById('confirmDialogTitle');
-            const confirmMsg = document.getElementById('confirmDialogMessage');
-            const origTitle = confirmTitle.textContent;
-            const origMsg = confirmMsg.textContent;
-            confirmTitle.textContent = 'Clear all app data?';
-            confirmMsg.textContent = 'This will remove chat history and reset preferences. Your API key will be kept.';
+            document.getElementById('confirmDialogTitle').textContent = 'Clear all app data?';
+            document.getElementById('confirmDialogMessage').textContent = 'This will remove chat history and reset preferences. Your API key will be kept.';
+            pendingConfirmAction = 'clearCache';
             confirmClearDialog.classList.remove('hidden');
-
-            const onCancel = () => {
-                confirmTitle.textContent = origTitle; confirmMsg.textContent = origMsg;
-                confirmClearDialog.classList.add('hidden');
-                document.getElementById('confirmClearCancel').removeEventListener('click', onCancel);
-                document.getElementById('confirmClearOk').removeEventListener('click', onConfirm);
-            };
-            const onConfirm = () => {
-                const keepKeys = ['theme', 'accent', 'apiKey'];
-                Object.keys(localStorage).forEach(key => { if (!keepKeys.includes(key)) localStorage.removeItem(key); });
-                allConversations = []; activeConversationId = null; currentConversation = [];
-                customInstructions = ''; customInstructionsInput.value = '';
-                apiKeyInput.value = localStorage.getItem('apiKey') || ''; apiKey = localStorage.getItem('apiKey') || '';
-                chatArea.innerHTML = ''; typingIndicatorEl = null;
-                welcomeScreen.style.display = 'flex'; chatArea.style.display = 'none';
-                welcomeUserInput.value = ''; userInput.value = '';
-                setActiveInput('welcome'); renderRecentChats();
-                persistData();
-                confirmTitle.textContent = origTitle; confirmMsg.textContent = origMsg;
-                confirmClearDialog.classList.add('hidden');
-                showToast('Cache cleared');
-                document.getElementById('confirmClearCancel').removeEventListener('click', onCancel);
-                document.getElementById('confirmClearOk').removeEventListener('click', onConfirm);
-            };
-            document.getElementById('confirmClearCancel').addEventListener('click', onCancel);
-            document.getElementById('confirmClearOk').addEventListener('click', onConfirm);
         });
         const modalButtons = settingsModal.querySelector('.modal-buttons');
         if (modalButtons) { modalButtons.parentNode.insertBefore(clearCacheBtn, modalButtons); }
@@ -1288,6 +1359,7 @@
 
     // Input focus scroll
     function scrollInputIntoView(e) {
+        if (window.innerWidth <= 768) return; // FIX: Prevent jumping / scrolling issues on mobile keyboard popup
         setTimeout(() => {
             const wrapper = e.target.closest('.input-container-wrapper') || e.target.closest('.welcome-input-container');
             if (wrapper) wrapper.scrollIntoView({ block: 'end', behavior: 'smooth' });

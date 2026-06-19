@@ -22,6 +22,7 @@
 
 :root {
     --bg: #f8f9fc;
+    --bg-rgb: 248, 249, 252;
     --surface: #ffffff;
     --surface-rgb: 255, 255, 255;
     --text: #1a1c2e;
@@ -41,6 +42,7 @@
 
 .dark {
     --bg: #121212;
+    --bg-rgb: 18, 18, 18;
     --surface: #1e1e1e;
     --surface-rgb: 30, 30, 30;
     --text: #e0e0e0;
@@ -222,7 +224,7 @@ body {
     flex-direction: column;
     padding: 20px;
     transition: width 0.3s ease, padding 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
-    z-index: 20;
+    z-index: 30; /* Bumped to strictly hide audio player when open */
     flex-shrink: 0;
     overflow: hidden;
     padding-top: calc(20px + env(safe-area-inset-top));
@@ -419,7 +421,7 @@ body {
     background: rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
-    z-index: 15;
+    z-index: 28; /* Layered exactly above content, below sidebar */
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.3s ease;
@@ -470,7 +472,7 @@ body {
     align-items: center;
     padding: 6px 12px;
     gap: 12px;
-    z-index: 50;
+    z-index: 20; /* Fixed: Corrected to sit properly behind sidebar */
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
     width: 90%;
     max-width: 280px;
@@ -645,7 +647,7 @@ body {
     color: var(--primary);
 }
 
-/* Mobile header – absolute, transparent, floats above chat */
+/* Mobile header */
 .mobile-header {
     display: none;
     align-items: center;
@@ -1051,10 +1053,12 @@ code[class*="language-"], pre[class*="language-"] {
 /* Wrapping logic so scroll button floats properly inside */
 .input-container-wrapper {
     padding: 12px 20px 20px;
-    background: var(--bg);
+    background: rgba(var(--bg-rgb), 0.75); /* Added for true blur effect */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     padding-bottom: calc(20px + env(safe-area-inset-bottom));
     flex-shrink: 0;
-    position: relative; /* Extremely important for scroll-btn absolute pos */
+    position: relative;
     z-index: 20;
 }
 
@@ -1063,13 +1067,15 @@ code[class*="language-"], pre[class*="language-"] {
     display: flex;
     align-items: flex-end;
     gap: 10px;
-    background: var(--surface);
+    background: rgba(var(--surface-rgb), 0.85); /* Proper transparency support */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--border);
     border-radius: 28px;
     padding: 8px 12px;
     transition: border-color 0.2s;
     box-shadow: var(--shadow);
-    flex-wrap: wrap; /* Only wraps if attachment preview exists */
+    flex-wrap: wrap; 
     justify-content: flex-start; 
     position: relative;
 }
@@ -1085,7 +1091,7 @@ code[class*="language-"], pre[class*="language-"] {
     gap: 12px;
     padding-bottom: 8px;
     flex-wrap: wrap;
-    order: 0; /* Ensures it stays on top of the input elements */
+    order: 0 !important; /* Ensures it stays on top of the input elements */
 }
 
 .attachment-preview.hidden {
@@ -1131,12 +1137,12 @@ code[class*="language-"], pre[class*="language-"] {
 
 /* Ordering the input controls perfectly inline */
 #btnAttach, #btnAttachWelcome {
-    order: 1;
-    margin-right: 0;
+    order: 2 !important;
+    margin-right: auto !important;
 }
 
 textarea {
-    flex: 1; /* Takes up all middle space smoothly */
+    flex: 1 1 100% !important; /* Forces line break so buttons sit below */
     min-width: 0;
     border: none;
     resize: none;
@@ -1148,15 +1154,16 @@ textarea {
     max-height: 120px;
     padding: 10px 0;
     line-height: 1.4;
-    order: 2;
+    order: 1 !important;
+    margin-bottom: 4px;
 }
 
 #btnMic, #btnMicWelcome {
-    order: 3;
+    order: 3 !important;
 }
 
 #btnSend, #btnSendWelcome {
-    order: 4;
+    order: 4 !important;
     background: var(--primary);
     color: white;
     width: 44px;
@@ -1533,6 +1540,14 @@ textarea {
         padding-top: 56px;
     }
 
+    /* Make AI messages full width on mobile & slightly smaller padding */
+    .message-wrapper.ai {
+        max-width: 100%;
+    }
+    .message {
+        padding: 10px 14px;
+    }
+
     .input-container-wrapper {
         padding: 10px 12px 16px;
         padding-bottom: calc(16px + env(safe-area-inset-bottom));
@@ -1571,7 +1586,7 @@ textarea {
     }
     
     .audio-player {
-        top: 70px;
+        top: 60px; /* Shifted down to not block absolute menu */
     }
 }
 
