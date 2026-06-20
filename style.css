@@ -1767,3 +1767,57 @@ textarea {
     color: var(--primary);
     opacity: 1;
 }
+
+/* =========================================
+   ANDROID WEBVIEW LAYOUT & HEADER FIXES
+   ========================================= */
+
+/* 1. Lock the header strictly to the top & add solid background to prevent chat bleeding */
+header, .app-header, .header {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    height: 60px !important;
+    background-color: var(--bg-color, #121212) !important;
+    z-index: 1000 !important;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3); /* Subtle separation line */
+}
+
+/* 2. Center the Audio Player so it never collides with left/right buttons */
+#audioPlayer {
+    position: fixed !important;
+    top: 10px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    z-index: 2000 !important;
+}
+
+/* 3. Reset mobile buttons to prevent them from sagging */
+#mobileMenuBtn, #mobileNewChatBtn, #desktopMenuBtn {
+    position: relative !important;
+    top: 0 !important;
+    margin-top: 0 !important;
+}
+
+/* 4. Push chat area down so messages don't hide behind the fixed header */
+#chatArea {
+    padding-top: 75px !important;
+    height: 100dvh !important; /* Modern fix to prevent Android navigation bar jumps */
+}
+
+/* 5. Advanced: Handle Android Status Bar/Notch Padding automatically */
+@supports (padding-top: env(safe-area-inset-top)) {
+    header, .app-header, .header {
+        padding-top: env(safe-area-inset-top) !important;
+        height: calc(60px + env(safe-area-inset-top)) !important;
+    }
+    #audioPlayer {
+        top: calc(10px + env(safe-area-inset-top)) !important;
+    }
+    #chatArea {
+        padding-top: calc(75px + env(safe-area-inset-top)) !important;
+    }
+}

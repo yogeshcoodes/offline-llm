@@ -1,5 +1,5 @@
 (function () {
-    console.log("Aethos AI script starting... (Multi-API support with fallback)");
+    console.log("Aethos AI script starting... (Multi-API + Multimodal Offline Support)");
 
     // ==================== LOCAL MODEL BRIDGE ====================
     let pendingCallbacks = {};
@@ -47,28 +47,37 @@
     }
 
     // ==================== MULTI-PROVIDER API CALL (with context) ====================
-    async function callAIAPI(messages, apiKey, systemInstruction, signal) {
+    async function callAIAPI(messages, apiKey, systemInstruction, signal, base64Image = null) {
         const key = apiKey.trim();
         if (!key) throw new Error("No API key provided");
 
         if (key.startsWith("gsk_")) {
-            return await callGroqAPI(messages, key, systemInstruction, signal);
+            return await callGroqAPI(messages, key, systemInstruction, signal, base64Image);
         } else if (key.startsWith("sk-")) {
-            return await callOpenAIAPI(messages, key, systemInstruction, signal);
+            return await callOpenAIAPI(messages, key, systemInstruction, signal, base64Image);
         } else if (key.startsWith("AIza") || key.length >= 30) {
-            return await callGeminiAPI(messages, key, systemInstruction, signal);
+            return await callGeminiAPI(messages, key, systemInstruction, signal, base64Image);
         } else {
             console.warn("Unknown API key format, trying Gemini...");
-            return await callGeminiAPI(messages, key, systemInstruction, signal);
+            return await callGeminiAPI(messages, key, systemInstruction, signal, base64Image);
         }
     }
 
-    async function callGeminiAPI(messages, apiKey, systemInstruction, signal) {
+    async function callGeminiAPI(messages, apiKey, systemInstruction, signal, base64Image) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
         const contents = [];
-        for (const msg of messages) {
+        for (let i = 0; i < messages.length; i++) {
+            const msg = messages[i];
             const role = msg.role === 'user' ? 'user' : 'model';
-            contents.push({ role: role, parts: [{ text: msg.content }] });
+            let parts = [{ text: msg.content }];
+
+            // Send image directly to Gemini API if attached on the final prompt
+            if (role === 'user' && i === messages.length - 1 && base64Image) {
+                const mimeType = base64Image.split(';')[0].split(':')[1];
+                const base64Data = base64Image.split(',')[1];
+                parts.push({ inline_data: { mime_type: mimeType, data: base64Data } });
+            }
+            contents.push({ role: role, parts: parts });
         }
         const requestBody = { contents: contents };
         if (systemInstruction) {
@@ -99,58 +108,86 @@
         "qwen-2.5-32b"
     ];
 
-    async function callGroqAPI(messages, apiKey, systemInstruction, signal) {
+    async function callGroqAPI(messages, apiKey, systemInstruction, signal, base64Image) {
         let fullMessages = [];
         if (systemInstruction) {
             fullMessages.push({ role: "system", content: systemInstruction });
         }
-        fullMessages = fullMessages.concat(messages);
-        let lastError = null;
-        for (const model of GROQ_MODELS) {
-            try {
-                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${apiKey}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        model: model,
-                        messages: fullMessages,
-                        temperature: 0.7
-                    }),
-                    signal: signal
+
+        // Dynamically switch to Vision model if image is present
+        let targetModel = base64Image ? "llama-3.2-11b-vision-preview" : GROQ_MODELS[0];
+
+        for (let i = 0; i < messages.length; i++) {
+            let msg = messages[i];
+            let role = msg.role === 'ai' ? 'assistant' : 'user';
+
+            // Format Vision Payload for the final user message
+            if (role === 'user' && i === messages.length - 1 && base64Image) {
+                fullMessages.push({
+                    role: role,
+                    content: [
+                        { type: "text", text: msg.content },
+                        { type: "image_url", image_url: { url: base64Image } }
+                    ]
                 });
-                if (!response.ok) {
-                    const errText = await response.text();
-                    const errorObj = JSON.parse(errText);
-                    if (errorObj.error?.message?.toLowerCase().includes("decommissioned") ||
-                        errorObj.error?.message?.toLowerCase().includes("not found")) {
-                        console.warn(`Groq model ${model} decommissioned, trying next...`);
-                        continue;
-                    }
-                    throw new Error(`Groq API error (${response.status}): ${errText}`);
-                }
-                const data = await response.json();
-                if (!data.choices || data.choices.length === 0) throw new Error("Groq: No response");
-                return data.choices[0].message.content;
-            } catch (err) {
-                lastError = err;
-                if (err.name === 'AbortError') throw err; // Don't continue if aborted
-                if (err.message.includes("decommissioned") || err.message.includes("not found")) continue;
-                throw err;
+            } else {
+                fullMessages.push({ role: role, content: msg.content });
             }
         }
-        throw new Error(`All Groq models failed. Last error: ${lastError?.message || "Unknown"}`);
+
+        try {
+            const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: targetModel,
+                    messages: fullMessages,
+                    temperature: 0.7
+                }),
+                signal: signal
+            });
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(`Groq API error (${response.status}): ${errText}`);
+            }
+            const data = await response.json();
+            if (!data.choices || data.choices.length === 0) throw new Error("Groq: No response");
+            return data.choices[0].message.content;
+        } catch (err) {
+            if (err.name === 'AbortError') throw err;
+            throw err;
+        }
     }
 
-    async function callOpenAIAPI(messages, apiKey, systemInstruction, signal) {
+    async function callOpenAIAPI(messages, apiKey, systemInstruction, signal, base64Image) {
         const url = "https://api.openai.com/v1/chat/completions";
         let fullMessages = [];
         if (systemInstruction) {
             fullMessages.push({ role: "system", content: systemInstruction });
         }
-        fullMessages = fullMessages.concat(messages);
+
+        let targetModel = base64Image ? "gpt-4o-mini" : "gpt-3.5-turbo";
+
+        for (let i = 0; i < messages.length; i++) {
+            let msg = messages[i];
+            let role = msg.role === 'ai' ? 'assistant' : 'user';
+
+            if (role === 'user' && i === messages.length - 1 && base64Image) {
+                fullMessages.push({
+                    role: role,
+                    content: [
+                        { type: "text", text: msg.content },
+                        { type: "image_url", image_url: { url: base64Image } }
+                    ]
+                });
+            } else {
+                fullMessages.push({ role: role, content: msg.content });
+            }
+        }
+
         const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -158,7 +195,7 @@
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: "gpt-3.5-turbo",
+                model: targetModel,
                 messages: fullMessages,
                 temperature: 0.7
             }),
@@ -249,14 +286,13 @@
     let autoScroll = true;
 
     // ==================== MASTER AI SYSTEM PROMPT ====================
-    // Heavily upgraded behavior control to prevent hallucinations, image generation loops, and improve local model logic.
-    const MASTER_SYSTEM_PROMPT = `You are Aethos AI, an advanced, highly intelligent assistant.
-CRITICAL CAPABILITIES & RULES:
-1. IMAGE GENERATION: The system has a built-in image generator. If the user asks you to create, generate, or draw an image, YOU MUST reply EXACTLY with: "I can do that! Please start your next prompt with 'Generate an image of...' so my visual engine can process it." DO NOT attempt to describe the image yourself. DO NOT ask "Would you like me to generate it now?". YOU MUST NEVER pretend you are drawing it.
-2. WEB SEARCH: You have real-time internet access via integrated tools. If the user asks about current events, answer factually using the provided Web Search Context. 
-3. NEVER say "As a text-based AI, I cannot..." or "I don't have internet access." You possess these capabilities.
-4. REASONING: Think step-by-step for complex queries. Be concise but highly accurate. Break down complex tasks logically.
-5. FORMATTING: Use Markdown for all formatting (bolding, lists, code blocks). Do not prefix your replies with "Aethos:" or "Assistant:".`;
+    // Highly simplified to prevent 1B local model confusion and hallucinations.
+    const MASTER_SYSTEM_PROMPT = `You are Aethos AI, an intelligent, helpful, and concise assistant.
+CRITICAL RULES:
+1. Answer the user's questions naturally and directly. If they say hi, say hi back.
+2. NEVER say "As an AI..." or claim you lack internet or image capabilities. Your tools handle this automatically.
+3. If [Web Search Context: ...] is provided, use it to answer the user's question accurately.
+4. Use Markdown for formatting. Do NOT prefix your replies with "Aethos:" or "Assistant:". Provide only the final answer.`;
 
     // Persistence helpers
     function persistData() {
@@ -317,7 +353,7 @@ CRITICAL CAPABILITIES & RULES:
     }
 
     // Advanced Markdown parser ensuring code blocks don't get destroyed by <br> conversions
-    window.copyCodeBlock = function (btn) {
+    window.copyCodeBlock = function(btn) {
         const pre = btn.closest('.code-block-wrapper').querySelector('pre');
         const code = pre.textContent; // Pulls text cleanly without html tags
         navigator.clipboard.writeText(code).then(() => {
@@ -338,7 +374,7 @@ CRITICAL CAPABILITIES & RULES:
 
         // 1. Extract Code Blocks so we don't mess up their formatting with <p> and <br>
         const codeBlocks = [];
-        html = html.replace(/```(\w*)[ \t]*\r?\n([\s\S]*?)```/g, function (match, lang, code) {
+        html = html.replace(/```(\w*)[ \t]*\r?\n([\s\S]*?)```/g, function(match, lang, code) {
             codeBlocks.push({ lang, code });
             return `\n\n___CODE_BLOCK_${codeBlocks.length - 1}___\n\n`;
         });
@@ -446,7 +482,7 @@ CRITICAL CAPABILITIES & RULES:
         isWebSearchEnabled = !isWebSearchEnabled;
         btnSearchWelcome.classList.toggle('active', isWebSearchEnabled);
         btnSearchMain.classList.toggle('active', isWebSearchEnabled);
-        showToast(isWebSearchEnabled ? 'Web Search Enabled' : 'Web Search Disabled');
+        // showToast(isWebSearchEnabled ? 'Web Search Enabled' : 'Web Search Disabled');
     }
     btnSearchWelcome.addEventListener('click', toggleWebSearch);
     btnSearchMain.addEventListener('click', toggleWebSearch);
@@ -539,7 +575,7 @@ CRITICAL CAPABILITIES & RULES:
         if (attachments && attachments.length > 0) {
             attachmentHtml = '<div class="chat-message-attachments">';
             attachments.forEach(att => {
-                if (att.type.startsWith('image/')) {
+                if(att.type.startsWith('image/')) {
                     attachmentHtml += `<img src="${att.url}" alt="attached image" style="max-width: 240px; max-height: 240px; width: auto; height: auto; object-fit: contain; border-radius: 12px; margin-top: 4px;">`;
                 } else {
                     attachmentHtml += `<div style="background:rgba(0,0,0,0.15); padding:8px 12px; border-radius:8px; display:inline-flex; align-items:center; gap:8px; font-size:0.85rem;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> ${att.name}</div>`;
@@ -769,6 +805,9 @@ CRITICAL CAPABILITIES & RULES:
         }
     }
 
+    // ============================================
+    // THE MASTER MESSAGE SENDER
+    // ============================================
     async function sendMessage() {
         if (isGenerating) {
             // STOP Logic
@@ -797,24 +836,45 @@ CRITICAL CAPABILITIES & RULES:
         // Format prompt explicitly for attachments if any
         let fullPrompt = text;
         const attachmentsCopy = [...pendingAttachments];
+        let hasImage = false;
+        let base64Image = "";
+
         if (attachmentsCopy.length > 0) {
             const filesStr = attachmentsCopy.map(a => a.name).join(', ');
             fullPrompt += `\n[User attached files: ${filesStr}]`;
+
+            const imgAttachment = attachmentsCopy.find(a => a.type.startsWith('image/'));
+            if (imgAttachment) {
+                hasImage = true;
+                base64Image = imgAttachment.url;
+            }
         }
 
         // ================= AGENTIC ROUTER: Image Generation =================
-        // Highly broadened intent matching. Intercepts anything requesting visual creation.
-        const isImageIntent = /^(?:can you\s+)?(?:please\s+)?(?:generate|create|make|draw|show(?: me)?).{0,60}(?:image|picture|photo|drawing|pic)/i.test(text);
+        let isImageIntent = false;
+        let imgPrompt = "";
+
+        // Broad match to catch "generate an image of a cat", "show me a picture of space", "i want a photo of a dog"
+        const imgRegex = /(?:generate|create|make|draw|show me|want).{0,40}(?:image|picture|photo|drawing|pic(?:ture)?)\s+(?:of\s+)?(.+)/i;
+        // Catch direct draw commands like "draw a futuristic city"
+        const drawRegex = /^(?:please\s+)?(?:draw|paint|sketch)\s+(.+)/i;
+
+        if (imgRegex.test(text)) {
+            isImageIntent = true;
+            imgPrompt = text.match(imgRegex)[1].trim();
+        } else if (drawRegex.test(text)) {
+            isImageIntent = true;
+            imgPrompt = text.match(drawRegex)[1].trim();
+        }
 
         if (isImageIntent && navigator.onLine) {
-            const imgPrompt = text.trim();
             appendMessage('user', text, attachmentsCopy, false);
             pendingAttachments = []; renderAttachments();
 
             showTypingIndicator(true);
             toggleSendStop(true);
 
-            // Pollinations.ai free endpoint parses the entire prompt naturally
+            // Pollinations.ai free endpoint parses the prompt naturally
             const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(imgPrompt)}?nologo=true`;
 
             const img = new Image();
@@ -879,7 +939,7 @@ CRITICAL CAPABILITIES & RULES:
                     if (searchResults && searchResults.trim() !== "") {
                         finalPromptForLLM = `[Web Search Context: ${searchResults}]\n\nAnswer the user using the above context. User Query: ${text}`;
                     }
-                } catch (e) {
+                } catch(e) {
                     console.warn("Search failed", e);
                     showToast("Web search failed, falling back to local knowledge.");
                 }
@@ -896,27 +956,24 @@ CRITICAL CAPABILITIES & RULES:
                 const systemInstruction = customInstructions.trim() ? (MASTER_SYSTEM_PROMPT + "\n\nUser Custom Instructions:\n" + customInstructions.trim()) : MASTER_SYSTEM_PROMPT;
 
                 try {
-                    response = await callAIAPI(messages, apiKey, systemInstruction, signal);
+                    response = await callAIAPI(messages, apiKey, systemInstruction, signal, base64Image);
                 } catch (apiErr) {
                     if (apiErr.name === 'AbortError') throw apiErr; // Pass abort up
                     console.warn('Cloud API error:', apiErr);
                     if (modelReady && window.AndroidTFLite) {
                         showToast('API error, trying local model...');
-                        response = await new Promise((resolve, reject) => {
-                            askLocalLLM(buildLocalPrompt(finalPromptForLLM), resolve, reject);
-                        });
+                        response = await handleLocalEngineFallback(finalPromptForLLM, hasImage, base64Image);
                     } else {
                         throw new Error(`API call failed: ${apiErr.message}`);
                     }
                 }
             } else {
-                if (!modelReady || !window.AndroidTFLite) throw new Error('Local model not ready');
-                response = await new Promise((resolve, reject) => {
-                    askLocalLLM(buildLocalPrompt(finalPromptForLLM), resolve, reject);
-                });
+                response = await handleLocalEngineFallback(finalPromptForLLM, hasImage, base64Image);
             }
+
             showTypingIndicator(false);
             appendMessage('ai', response, [], true); // True for animate/typing effect
+
         } catch (err) {
             if (err.name === 'AbortError') {
                 showToast('Generation stopped.');
@@ -931,6 +988,23 @@ CRITICAL CAPABILITIES & RULES:
             saveCurrentConversation(false);
             renderRecentChats();
             if (activeInput === 'welcome') welcomeUserInput.focus(); else userInput.focus();
+        }
+    }
+
+    // Abstracted to handle 1B Text vs 4B Vision Model Swapping safely
+    async function handleLocalEngineFallback(prompt, hasImage, base64Image) {
+        if (!modelReady || !window.AndroidTFLite) throw new Error('Local engine not initialized.');
+        if (hasImage && window.AndroidTFLite.runVisionModel) {
+            showToast("Booting Vision Engine...");
+            return await new Promise((resolve, reject) => {
+                const cb = 'vision_' + Date.now();
+                pendingCallbacks[cb] = resolve;
+                window.AndroidTFLite.runVisionModel(prompt, base64Image, cb);
+            });
+        } else {
+            return await new Promise((resolve, reject) => {
+                askLocalLLM(buildLocalPrompt(prompt), resolve, reject);
+            });
         }
     }
 
