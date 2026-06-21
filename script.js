@@ -619,7 +619,7 @@ CRITICAL RULES:
         hideThinkingIndicator();
         const bubble = document.createElement('div');
         bubble.className = 'thinking-indicator';
-        bubble.innerHTML = '<span class="think-text">Thinking</span>';
+        bubble.innerHTML = '<span class="think-text">Thinking...</span>';
         chatArea.appendChild(bubble);
         currentThinkingBubble = bubble;
         scrollToBottom();
