@@ -163,35 +163,18 @@ body {
 }
 
 @keyframes splashSpin {
-    from {
-        transform: rotate(0deg)
-    }
-
-    to {
-        transform: rotate(360deg)
-    }
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 @keyframes splashFadeIn {
-    from {
-        opacity: 0
-    }
-
-    to {
-        opacity: 1
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 @keyframes splashTextReveal {
-    from {
-        opacity: 0;
-        transform: translateY(20px)
-    }
-
-    to {
-        opacity: 1;
-        transform: translateY(0)
-    }
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 /* App */
@@ -225,7 +208,6 @@ body {
     padding: 20px;
     transition: width 0.3s ease, padding 0.3s ease, opacity 0.3s ease, transform 0.3s ease;
     z-index: 30;
-    /* Bumped to strictly hide audio player when open */
     flex-shrink: 0;
     overflow: hidden;
     padding-top: calc(20px + env(safe-area-inset-top));
@@ -423,7 +405,6 @@ body {
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     z-index: 28;
-    /* Layered exactly above content, below sidebar */
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.3s ease;
@@ -475,7 +456,6 @@ body {
     padding: 6px 12px;
     gap: 12px;
     z-index: 20;
-    /* Fixed: Corrected to sit properly behind sidebar */
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
     width: 90%;
     max-width: 280px;
@@ -726,13 +706,8 @@ body {
 }
 
 @keyframes spinLogo {
-    from {
-        transform: rotate(0deg)
-    }
-
-    to {
-        transform: rotate(360deg)
-    }
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 .spin-logo {
@@ -829,6 +804,7 @@ body {
 }
 
 .ai-message {
+    overflow: auto;
     background: var(--message-ai-bg);
     border: 1px solid var(--message-ai-border);
     border-bottom-left-radius: 6px;
@@ -860,7 +836,34 @@ body {
     font-style: italic;
 }
 
-/* --- FULLY OFFLINE PRISM CODE BLOCK STYLES --- */
+/* ─── TABLES inside AI messages ─── */
+.ai-message .message-text table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 0.9rem;
+}
+
+.ai-message .message-text th {
+    background: var(--primary-light);
+    color: var(--text);
+    font-weight: 700;
+    padding: 10px 14px;
+    text-align: left;
+    border: 1px solid var(--border);
+}
+
+.ai-message .message-text td {
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    color: var(--text);
+}
+
+.ai-message .message-text tr:nth-child(even) td {
+    background: rgba(var(--primary-rgb, 42, 124, 204), 0.03);
+}
+
+/* ─── Code blocks and inline code (unchanged) ─── */
 code[class*="language-"],
 pre[class*="language-"] {
     color: #ccc;
@@ -1072,6 +1075,7 @@ pre[class*="language-"] {
     justify-content: flex-start;
 }
 
+/* Typing indicator (three dots) – restored */
 .typing-indicator {
     display: flex;
     gap: 4px;
@@ -1091,34 +1095,18 @@ pre[class*="language-"] {
     animation: typingBounce 1.4s infinite ease-in-out both;
 }
 
-.typing-dot:nth-child(1) {
-    animation-delay: -0.32s;
-}
-
-.typing-dot:nth-child(2) {
-    animation-delay: -0.16s;
-}
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
 
 @keyframes typingBounce {
-
-    0%,
-    80%,
-    100% {
-        transform: scale(0.6);
-        opacity: 0.4
-    }
-
-    40% {
-        transform: scale(1);
-        opacity: 1
-    }
+    0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+    40% { transform: scale(1); opacity: 1; }
 }
 
-/* Wrapping logic so scroll button floats properly inside */
+/* Input container wrapper */
 .input-container-wrapper {
     padding: 12px 20px 20px;
     background: rgba(var(--bg-rgb), 0.75);
-    /* Added for true blur effect */
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     padding-bottom: calc(20px + env(safe-area-inset-bottom));
@@ -1131,9 +1119,8 @@ pre[class*="language-"] {
 .input-container {
     display: flex;
     align-items: flex-end;
-    gap: 10px;
+    gap: 7.4px;
     background: rgba(var(--surface-rgb), 0.85);
-    /* Proper transparency support */
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--border);
@@ -1158,7 +1145,6 @@ pre[class*="language-"] {
     padding-bottom: 8px;
     flex-wrap: wrap;
     order: 0 !important;
-    /* Ensures it stays on top of the input elements */
 }
 
 .attachment-preview.hidden {
@@ -1168,14 +1154,15 @@ pre[class*="language-"] {
 .attachment-item {
     position: relative;
     width: 72px;
-    /* Nicely sized preview */
     height: 72px;
     border-radius: 8px;
     overflow: hidden;
     border: 1px solid var(--border);
+    line-height: 0;
 }
 
 .attachment-item img {
+    display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -1210,19 +1197,28 @@ pre[class*="language-"] {
     margin-right: 4px !important;
 }
 
+/* Search button – sits inline, no auto‑margin */
 #btnSearchWelcome,
 #btnSearchMain {
     order: 2 !important;
-    margin-right: auto !important;
-    /* Pushes mic/send to the right */
+    margin-right: 0 !important;
 }
 
-/* Text Pill Search Button styling */
-.search-toggle-btn {
+/* Think button – placed right after search, then auto‑margin pushes mic/send to the right */
+#btnThinkWelcome,
+#btnThinkMain {
+    order: 2 !important;
+    margin-left: 4px !important;
+    margin-right: auto !important;
+}
+
+/* Text Pill Search & Think button styling */
+.search-toggle-btn,
+.think-toggle-btn {
     background: transparent;
     border: 1px solid var(--border);
-    padding: 0 14px;
-    border-radius: 20px;
+    padding: 0 8px;
+    border-radius: 50%;
     color: var(--text-secondary);
     font-weight: 600;
     font-size: 0.85rem;
@@ -1232,16 +1228,18 @@ pre[class*="language-"] {
     justify-content: center;
     transition: all 0.2s;
     height: 36px;
-    margin-bottom: 2px;
+    margin-bottom: 3px;
     font-family: inherit;
 }
 
-.search-toggle-btn:hover {
+.search-toggle-btn:hover,
+.think-toggle-btn:hover {
     background: var(--primary-light);
     color: var(--primary);
 }
 
-.search-toggle-btn.active {
+.search-toggle-btn.active,
+.think-toggle-btn.active {
     background: var(--primary-light);
     color: var(--primary);
     border-color: var(--primary);
@@ -1249,7 +1247,6 @@ pre[class*="language-"] {
 
 textarea {
     flex: 1 1 100% !important;
-    /* Forces line break so buttons sit below */
     min-width: 0;
     border: none;
     resize: none;
@@ -1279,7 +1276,7 @@ textarea {
     height: 44px;
 }
 
-/* Base icon size – used as default for all screen sizes */
+/* Base icon size */
 .icon-btn {
     background: none;
     border: none;
@@ -1422,11 +1419,11 @@ textarea {
     border-radius: 50%;
 }
 
-.toggle-switch input:checked+.slider {
+.toggle-switch input:checked + .slider {
     background-color: var(--primary);
 }
 
-.toggle-switch input:checked+.slider:before {
+.toggle-switch input:checked + .slider:before {
     transform: translateX(20px);
 }
 
@@ -1538,11 +1535,10 @@ textarea {
     margin-top: 8px;
 }
 
-/* ─── Scroll-down button (Dynamically floating above input) ─── */
+/* ─── Scroll-down button ─── */
 .scroll-down-btn {
     position: absolute;
     bottom: calc(100% + 10px);
-    /* This makes it float right on top of the input container wrapper */
     right: 40px;
     z-index: 30;
     width: 40px;
@@ -1649,7 +1645,6 @@ textarea {
         padding-top: 56px;
     }
 
-    /* Make AI messages full width on mobile & slightly smaller padding */
     .message-wrapper.ai {
         max-width: 100%;
     }
@@ -1693,12 +1688,10 @@ textarea {
 
     .scroll-down-btn {
         right: 15px;
-        /* Keeps it perfectly aligned with the mobile input padding */
     }
 
     .audio-player {
         top: 60px;
-        /* Shifted down to not block absolute menu */
     }
 }
 
@@ -1771,8 +1764,6 @@ textarea {
 /* =========================================
    ANDROID WEBVIEW LAYOUT & HEADER FIXES
    ========================================= */
-
-/* 1. Lock the header strictly to the top & add solid background to prevent chat bleeding */
 header, .app-header, .header {
     position: fixed !important;
     top: 0 !important;
@@ -1783,10 +1774,9 @@ header, .app-header, .header {
     z-index: 1000 !important;
     display: flex;
     align-items: center;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.3); /* Subtle separation line */
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
 
-/* 2. Center the Audio Player so it never collides with left/right buttons */
 #audioPlayer {
     position: fixed !important;
     top: 10px !important;
@@ -1795,29 +1785,93 @@ header, .app-header, .header {
     z-index: 2000 !important;
 }
 
-/* 3. Reset mobile buttons to prevent them from sagging */
 #mobileMenuBtn, #mobileNewChatBtn, #desktopMenuBtn {
     position: relative !important;
     top: 0 !important;
     margin-top: 0 !important;
 }
 
-/* 4. Push chat area down so messages don't hide behind the fixed header */
 #chatArea {
     padding-top: 75px !important;
-    height: 100dvh !important; /* Modern fix to prevent Android navigation bar jumps */
+    height: 100dvh !important;
 }
 
-/* 5. Advanced: Handle Android Status Bar/Notch Padding automatically */
 @supports (padding-top: env(safe-area-inset-top)) {
     header, .app-header, .header {
         padding-top: env(safe-area-inset-top) !important;
         height: calc(60px + env(safe-area-inset-top)) !important;
     }
     #audioPlayer {
-        top: calc(10px + env(safe-area-inset-top)) !important;
+        top: calc(58px + env(safe-area-inset-top)) !important;
     }
     #chatArea {
         padding-top: calc(75px + env(safe-area-inset-top)) !important;
     }
+}
+
+/* ================= NEW: THINKING INDICATOR & REASONING ================= */
+.thinking-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 16px;
+    background: var(--message-ai-bg);
+    border: 1px solid var(--message-ai-border);
+    border-radius: 20px;
+    border-bottom-left-radius: 6px;
+    align-self: flex-start;
+    gap: 6px;
+    animation: thinkPulse 1.5s ease-in-out infinite;
+    cursor: pointer;
+}
+
+.thinking-indicator .think-text {
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
+    color: var(--primary);
+}
+
+.thinking-indicator.hidden {
+    display: none;
+}
+
+@keyframes thinkPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Reasoning toggle inside AI message */
+.reasoning-toggle {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+    margin-top: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.reasoning-toggle:hover {
+    color: var(--primary);
+}
+
+.reasoning-content {
+    background: rgba(0,0,0,0.03);
+    border-left: 3px solid var(--primary);
+    padding: 10px;
+    margin-top: 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.reasoning-content.expanded {
+    max-height: 500px;
 }

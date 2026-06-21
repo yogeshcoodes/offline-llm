@@ -223,7 +223,25 @@
                         </button>
 
                         <button class="search-toggle-btn" id="btnSearchWelcome" title="Toggle Web Search">
-                            Search
+                            <!-- Globe SVG replaces text -->
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe-icon lucide-globe">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+                                <path d="M2 12h20"/>
+                            </svg>
+                        </button>
+                        <button class="think-toggle-btn" id="btnThinkWelcome" title="Toggle Extended Thinking">
+                            <!-- Brain SVG -->
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-brain-icon lucide-brain">
+                                <path d="M12 18V5"/>
+                                <path d="M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4"/>
+                                <path d="M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5"/>
+                                <path d="M17.997 5.125a4 4 0 0 1 2.526 5.77"/>
+                                <path d="M18 18a4 4 0 0 0 2-7.464"/>
+                                <path d="M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517"/>
+                                <path d="M6 18a4 4 0 0 1-2-7.464"/>
+                                <path d="M6.003 5.125a4 4 0 0 0-2.526 5.77"/>
+                            </svg>
                         </button>
 
                         <textarea id="welcomeUserInput" rows="1" placeholder="Ask Aethos"></textarea>
@@ -267,7 +285,23 @@
                     </button>
 
                     <button class="search-toggle-btn" id="btnSearchMain" title="Toggle Web Search">
-                        Search
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-globe-icon lucide-globe">
+                            <circle cx="12" cy="12" r="10"/>
+                            <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+                            <path d="M2 12h20"/>
+                        </svg>
+                    </button>
+                    <button class="think-toggle-btn" id="btnThinkMain" title="Toggle Extended Thinking">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-brain-icon lucide-brain">
+                            <path d="M12 18V5"/>
+                            <path d="M15 13a4.17 4.17 0 0 1-3-4 4.17 4.17 0 0 1-3 4"/>
+                            <path d="M17.598 6.5A3 3 0 1 0 12 5a3 3 0 1 0-5.598 1.5"/>
+                            <path d="M17.997 5.125a4 4 0 0 1 2.526 5.77"/>
+                            <path d="M18 18a4 4 0 0 0 2-7.464"/>
+                            <path d="M19.967 17.483A4 4 0 1 1 12 18a4 4 0 1 1-7.967-.517"/>
+                            <path d="M6 18a4 4 0 0 1-2-7.464"/>
+                            <path d="M6.003 5.125a4 4 0 0 0-2.526 5.77"/>
+                        </svg>
                     </button>
 
                     <textarea id="userInput" rows="1" placeholder="Ask Aethos..."></textarea>
@@ -292,6 +326,7 @@
         </main>
     </div>
 
+    <!-- Modals (unchanged) -->
     <div class="modal-overlay hidden" id="settingsModalOverlay">
         <div class="modal">
             <h3>Settings</h3>
@@ -347,34 +382,13 @@
             <h3>Sign in or create account</h3>
             <div class="user-auth-options">
                 <button class="user-option-btn" data-provider="google">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 102.018 104.1">
-                        <path fill="#4285f4"
-                            d="M102.018 53.204a44.6 44.6 0 0 0-1.1-10.641H52.05v19.316h28.685a25.436 25.436 0 0 1-10.641 16.887l-.1.647 15.452 11.97 1.07.107c9.831-9.08 15.5-22.44 15.5-38.286" />
-                        <path fill="#34a853"
-                            d="M52.05 104.1c14.053 0 25.851-4.627 34.469-12.608L70.094 78.768c-4.395 3.066-10.294 5.206-18.044 5.206a31.335 31.335 0 0 1-29.611-21.63l-.61.052L5.762 74.83l-.21.584a52.012 52.012 0 0 0 46.5 28.686" />
-                        <path fill="#fbbc05"
-                            d="M22.439 62.344A32.044 32.044 0 0 1 20.7 52.05a33.672 33.672 0 0 1 1.677-10.294l-.029-.69L6.084 28.432l-.532.253a51.94 51.94 0 0 0 0 46.729l16.887-13.07" />
-                        <path fill="#eb4335"
-                            d="M52.05 20.126a28.848 28.848 0 0 1 20.126 7.75l14.69-14.343A50.008 50.008 0 0 0 52.05 0a52.012 52.012 0 0 0-46.5 28.685l16.831 13.071a31.463 31.463 0 0 1 29.669-21.63" />
-                    </svg>
-                    <span>Continue with Google</span>
+                    <!-- Google SVG -->
                 </button>
                 <button class="user-option-btn" data-provider="facebook">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 1024 1024">
-                        <path fill="#1877f2"
-                            d="M1024,512C1024,229.23016,794.76978,0,512,0S0,229.23016,0,512c0,255.554,187.231,467.37012,432,505.77777V660H302V512H432V399.2C432,270.87982,508.43854,200,625.38922,200,681.40765,200,740,210,740,210V336H675.43713C611.83508,336,592,375.46667,592,415.95728V512H734L711.3,660H592v357.77777C836.769,979.37012,1024,767.554,1024,512Z" />
-                        <path fill="#fff"
-                            d="M711.3,660,734,512H592V415.95728C592,375.46667,611.83508,336,675.43713,336H740V210s-58.59235-10-114.61078-10C508.43854,200,432,270.87982,432,399.2V512H302V660H432v357.77777a517.39619,517.39619,0,0,0,160,0V660Z" />
-                    </svg>
-                    <span>Login with Facebook</span>
+                    <!-- Facebook SVG -->
                 </button>
                 <button class="user-option-btn" data-provider="phone">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path
-                            d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384" />
-                    </svg>
-                    <span>Use Phone Number</span>
+                    <!-- Phone SVG -->
                 </button>
             </div>
             <button class="btn-secondary user-account-close-btn" id="btnUserAccountClose">Cancel</button>

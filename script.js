@@ -1,5 +1,5 @@
 (function () {
-    console.log("Aethos AI script starting... (Multi-API + Multimodal Offline Support)");
+    console.log("Aethos AI script starting... (Multi-API + Reasoning + Fallback)");
 
     // ==================== LOCAL MODEL BRIDGE ====================
     let pendingCallbacks = {};
@@ -46,11 +46,10 @@
         }
     }
 
-    // ==================== MULTI-PROVIDER API CALL (with context) ====================
+    // ==================== MULTI-PROVIDER API CALL ====================
     async function callAIAPI(messages, apiKey, systemInstruction, signal, base64Image = null) {
         const key = apiKey.trim();
         if (!key) throw new Error("No API key provided");
-
         if (key.startsWith("gsk_")) {
             return await callGroqAPI(messages, key, systemInstruction, signal, base64Image);
         } else if (key.startsWith("sk-")) {
@@ -70,8 +69,6 @@
             const msg = messages[i];
             const role = msg.role === 'user' ? 'user' : 'model';
             let parts = [{ text: msg.content }];
-
-            // Send image directly to Gemini API if attached on the final prompt
             if (role === 'user' && i === messages.length - 1 && base64Image) {
                 const mimeType = base64Image.split(';')[0].split(':')[1];
                 const base64Data = base64Image.split(',')[1];
@@ -101,80 +98,16 @@
         return content.parts[0].text;
     }
 
-    const GROQ_MODELS = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
-        "gemma2-9b-it",
-        "qwen-2.5-32b"
-    ];
-
-    async function callGroqAPI(messages, apiKey, systemInstruction, signal, base64Image) {
-        let fullMessages = [];
-        if (systemInstruction) {
-            fullMessages.push({ role: "system", content: systemInstruction });
-        }
-
-        // Dynamically switch to Vision model if image is present
-        let targetModel = base64Image ? "llama-3.2-11b-vision-preview" : GROQ_MODELS[0];
-
-        for (let i = 0; i < messages.length; i++) {
-            let msg = messages[i];
-            let role = msg.role === 'ai' ? 'assistant' : 'user';
-
-            // Format Vision Payload for the final user message
-            if (role === 'user' && i === messages.length - 1 && base64Image) {
-                fullMessages.push({
-                    role: role,
-                    content: [
-                        { type: "text", text: msg.content },
-                        { type: "image_url", image_url: { url: base64Image } }
-                    ]
-                });
-            } else {
-                fullMessages.push({ role: role, content: msg.content });
-            }
-        }
-
-        try {
-            const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    model: targetModel,
-                    messages: fullMessages,
-                    temperature: 0.7
-                }),
-                signal: signal
-            });
-            if (!response.ok) {
-                const errText = await response.text();
-                throw new Error(`Groq API error (${response.status}): ${errText}`);
-            }
-            const data = await response.json();
-            if (!data.choices || data.choices.length === 0) throw new Error("Groq: No response");
-            return data.choices[0].message.content;
-        } catch (err) {
-            if (err.name === 'AbortError') throw err;
-            throw err;
-        }
-    }
-
     async function callOpenAIAPI(messages, apiKey, systemInstruction, signal, base64Image) {
         const url = "https://api.openai.com/v1/chat/completions";
         let fullMessages = [];
         if (systemInstruction) {
             fullMessages.push({ role: "system", content: systemInstruction });
         }
-
         let targetModel = base64Image ? "gpt-4o-mini" : "gpt-3.5-turbo";
-
         for (let i = 0; i < messages.length; i++) {
             let msg = messages[i];
             let role = msg.role === 'ai' ? 'assistant' : 'user';
-
             if (role === 'user' && i === messages.length - 1 && base64Image) {
                 fullMessages.push({
                     role: role,
@@ -187,7 +120,6 @@
                 fullMessages.push({ role: role, content: msg.content });
             }
         }
-
         const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -208,6 +140,177 @@
         const data = await response.json();
         if (!data.choices || data.choices.length === 0) throw new Error("OpenAI: No response");
         return data.choices[0].message.content;
+    }
+
+    // ==================== GROQ MODELS ====================
+    const GROQ_MODELS = [
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "qwen/qwen3-32b",
+        "qwen/qwen3.6-27b",
+        "meta-llama/llama-4-scout-17b-16e-instruct",
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant"
+    ];
+
+    async function callGroqAPI(messages, apiKey, systemInstruction, signal, base64Image) {
+        let fullMessages = [];
+        if (systemInstruction) {
+            fullMessages.push({ role: "system", content: systemInstruction });
+        }
+        for (let i = 0; i < messages.length; i++) {
+            let msg = messages[i];
+            let role = msg.role === 'ai' ? 'assistant' : 'user';
+            if (role === 'user' && i === messages.length - 1 && base64Image) {
+                fullMessages.push({
+                    role: role,
+                    content: [
+                        { type: "text", text: msg.content },
+                        { type: "image_url", image_url: { url: base64Image } }
+                    ]
+                });
+            } else {
+                fullMessages.push({ role: role, content: msg.content });
+            }
+        }
+        let lastError;
+        for (const model of GROQ_MODELS) {
+            try {
+                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: fullMessages,
+                        temperature: 0.7
+                    }),
+                    signal: signal
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Groq API error (${response.status}): ${errText}`);
+                }
+                const data = await response.json();
+                if (!data.choices || data.choices.length === 0) throw new Error("Groq: No response");
+                return data.choices[0].message.content;
+            } catch (err) {
+                lastError = err;
+                if (err.name === 'AbortError') throw err;
+            }
+        }
+        throw lastError || new Error('All Groq models failed');
+    }
+
+    // ==================== GROQ STREAMING WITH REASONING ====================
+    async function callGroqStreaming(messages, apiKey, systemInstruction, signal, base64Image, reasoningEffort, onReasoningChunk, onAnswerChunk, onDone, onError) {
+        let fullMessages = [];
+        if (systemInstruction) {
+            fullMessages.push({ role: "system", content: systemInstruction });
+        }
+        for (let i = 0; i < messages.length; i++) {
+            let msg = messages[i];
+            let role = msg.role === 'ai' ? 'assistant' : 'user';
+            if (role === 'user' && i === messages.length - 1 && base64Image) {
+                fullMessages.push({
+                    role: role,
+                    content: [
+                        { type: "text", text: msg.content },
+                        { type: "image_url", image_url: { url: base64Image } }
+                    ]
+                });
+            } else {
+                fullMessages.push({ role: role, content: msg.content });
+            }
+        }
+        let lastError;
+        for (const model of GROQ_MODELS) {
+            try {
+                const payload = {
+                    model: model,
+                    messages: fullMessages,
+                    temperature: 0.7,
+                    stream: true
+                };
+                if (reasoningEffort) {
+                    payload.reasoning_effort = reasoningEffort;
+                }
+                const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload),
+                    signal: signal
+                });
+                if (!response.ok) {
+                    const errText = await response.text();
+                    throw new Error(`Groq stream error (${response.status}): ${errText}`);
+                }
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let inThink = false;
+                let reasoningAccum = '';
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    for (const line of lines) {
+                        const trimmed = line.trim();
+                        if (!trimmed.startsWith('data: ')) continue;
+                        const jsonStr = trimmed.slice(6);
+                        if (jsonStr === '[DONE]') {
+                            onDone();
+                            return;
+                        }
+                        try {
+                            const data = JSON.parse(jsonStr);
+                            const delta = data.choices?.[0]?.delta?.content;
+                            if (!delta) continue;
+                            let idx = 0;
+                            while (idx < delta.length) {
+                                if (!inThink) {
+                                    const thinkStart = delta.indexOf('<think>', idx);
+                                    if (thinkStart !== -1) {
+                                        const before = delta.slice(idx, thinkStart);
+                                        if (before) onAnswerChunk(before);
+                                        inThink = true;
+                                        idx = thinkStart + 8;
+                                    } else {
+                                        onAnswerChunk(delta.slice(idx));
+                                        break;
+                                    }
+                                } else {
+                                    const thinkEnd = delta.indexOf('</think>', idx);
+                                    if (thinkEnd !== -1) {
+                                        reasoningAccum += delta.slice(idx, thinkEnd);
+                                        onReasoningChunk(reasoningAccum);
+                                        inThink = false;
+                                        idx = thinkEnd + 8;
+                                    } else {
+                                        reasoningAccum += delta.slice(idx);
+                                        onReasoningChunk(reasoningAccum);
+                                        break;
+                                    }
+                                }
+                            }
+                        } catch (e) { /* ignore parse errors */ }
+                    }
+                }
+                onDone();
+                return;
+            } catch (err) {
+                lastError = err;
+                if (err.name === 'AbortError') throw err;
+            }
+        }
+        onError(lastError || new Error('All Groq streaming models failed'));
     }
 
     // ==================== DOM REFS ====================
@@ -247,11 +350,11 @@
     const apiKeyInput = document.getElementById('apiKeyInput');
     const scrollDownBtn = document.getElementById('scrollDownBtn');
 
-    // Web Search Toggle Refs
     const btnSearchWelcome = document.getElementById('btnSearchWelcome');
     const btnSearchMain = document.getElementById('btnSearchMain');
+    const btnThinkWelcome = document.getElementById('btnThinkWelcome');
+    const btnThinkMain = document.getElementById('btnThinkMain');
 
-    // Audio Player Refs
     const audioPlayer = document.getElementById('audioPlayer');
     const audioPlayPauseBtn = document.getElementById('audioPlayPauseBtn');
     const audioCloseBtn = document.getElementById('audioCloseBtn');
@@ -273,26 +376,26 @@
     let apiKey = localStorage.getItem('apiKey') || '';
     let pendingAttachments = [];
     let isWebSearchEnabled = false;
+    let isThinkingEnabled = false;
+    let currentThinkingBubble = null;
 
-    // Centralized Confirmation State
     let pendingConfirmAction = null;
-
-    // Abort Logic & Streaming
     let globalAbortController = null;
     let isGenerating = false;
     let typingInterval = null;
-
-    // Auto-scroll state
     let autoScroll = true;
 
-    // ==================== MASTER AI SYSTEM PROMPT ====================
-    // Highly simplified to prevent 1B local model confusion and hallucinations.
     const MASTER_SYSTEM_PROMPT = `You are Aethos AI, an intelligent, helpful, and concise assistant.
 CRITICAL RULES:
 1. Answer the user's questions naturally and directly. If they say hi, say hi back.
 2. NEVER say "As an AI..." or claim you lack internet or image capabilities. Your tools handle this automatically.
 3. If [Web Search Context: ...] is provided, use it to answer the user's question accurately.
 4. Use Markdown for formatting. Do NOT prefix your replies with "Aethos:" or "Assistant:". Provide only the final answer.`;
+
+    // Utility to strip any <think> tags from text (for non-streaming responses)
+    function removeThinkTags(text) {
+        return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    }
 
     // Persistence helpers
     function persistData() {
@@ -303,9 +406,7 @@ CRITICAL RULES:
     function loadPersistedData() {
         const savedConv = localStorage.getItem('allConversations');
         if (savedConv) {
-            try {
-                allConversations = JSON.parse(savedConv);
-            } catch (e) { allConversations = []; }
+            try { allConversations = JSON.parse(savedConv); } catch (e) { allConversations = []; }
         }
         const savedActiveId = localStorage.getItem('activeConversationId');
         if (savedActiveId && allConversations.find(c => c.id === savedActiveId)) {
@@ -314,7 +415,6 @@ CRITICAL RULES:
         renderRecentChats();
     }
 
-    // Apply accent
     function applyAccent(color) {
         currentAccent = color;
         document.body.style.setProperty('--primary', color);
@@ -336,14 +436,11 @@ CRITICAL RULES:
     function saveCustomInstructions(val) { customInstructions = val; localStorage.setItem('customInstructions', val); }
     apiKeyInput.value = apiKey;
 
-    // Toast with fade
     function showToast(msg, duration = 2500) {
         toast.textContent = msg;
         toast.classList.add('visible');
         clearTimeout(toast._timeout);
-        toast._timeout = setTimeout(() => {
-            toast.classList.remove('visible');
-        }, duration);
+        toast._timeout = setTimeout(() => { toast.classList.remove('visible'); }, duration);
     }
 
     function escapeHtml(str) {
@@ -352,70 +449,98 @@ CRITICAL RULES:
             .replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, c => c);
     }
 
-    // Advanced Markdown parser ensuring code blocks don't get destroyed by <br> conversions
     window.copyCodeBlock = function(btn) {
         const pre = btn.closest('.code-block-wrapper').querySelector('pre');
-        const code = pre.textContent; // Pulls text cleanly without html tags
+        const code = pre.textContent;
         navigator.clipboard.writeText(code).then(() => {
             const originalHtml = btn.innerHTML;
             btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied!`;
-            setTimeout(() => {
-                btn.innerHTML = originalHtml;
-            }, 2000);
+            setTimeout(() => { btn.innerHTML = originalHtml; }, 2000);
         });
     };
 
+    // ==================== ENHANCED MARKDOWN ====================
     function simpleMarkdown(text) {
         if (!text) return '';
-        let html = escapeHtml(text);
 
-        // Render Images ![alt](url)
-        html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%; border-radius:12px; margin-top:8px; display:block;">');
-
-        // 1. Extract Code Blocks so we don't mess up their formatting with <p> and <br>
         const codeBlocks = [];
-        html = html.replace(/```(\w*)[ \t]*\r?\n([\s\S]*?)```/g, function(match, lang, code) {
+        text = text.replace(/```(\w*)\r?\n([\s\S]*?)```/g, (_, lang, code) => {
             codeBlocks.push({ lang, code });
-            return `\n\n___CODE_BLOCK_${codeBlocks.length - 1}___\n\n`;
+            return `\n___CODEBLOCK_${codeBlocks.length - 1}___\n`;
         });
 
-        // 2. Formatting inline text
-        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-        html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        const images = [];
+        text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, url) => {
+            images.push({ alt, url });
+            return `___IMAGE_${images.length - 1}___`;
+        });
 
-        // 3. Process lines and paragraphs
-        html = html.split(/\n\n+/).map(p => {
-            const trimmed = p.trim();
+        text = escapeHtml(text);
+
+        text = text.replace(/___IMAGE_(\d+)___/g, (_, i) => {
+            const img = images[parseInt(i)];
+            return `<img src="${img.url}" alt="${escapeHtml(img.alt)}" style="max-width:100%; border-radius:12px; margin-top:8px; display:block;">`;
+        });
+
+        text = text.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+        text = text.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+        text = text.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+        text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
+        text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+        // Tables – convert pipe tables to HTML
+        let tableHtml = '';
+        text = text.replace(/\n((\|[^\n]+\|)\s*\n\|[-:| ]+\|\s*\n(\|[^\n]+\|\s*\n?)+)/gm, (match) => {
+            const lines = match.trim().split('\n');
+            if (lines.length < 2) return match;
+            const headerCells = lines[0].split('|').filter(cell => cell.trim() !== '');
+            const bodyLines = lines.slice(2);
+            let html = '<table>';
+            html += '<thead><tr>' + headerCells.map(cell => `<th>${cell.trim()}</th>`).join('') + '</tr></thead>';
+            html += '<tbody>';
+            bodyLines.forEach(line => {
+                const cells = line.split('|').filter(cell => cell.trim() !== '');
+                html += '<tr>' + cells.map(cell => `<td>${cell.trim()}</td>`).join('') + '</tr>';
+            });
+            html += '</tbody></table>';
+            tableHtml = html;
+            return '\n___TABLE___\n';
+        });
+        if (tableHtml) {
+            text = text.replace('___TABLE___', tableHtml);
+        }
+
+        text = text.replace(/___CODEBLOCK_(\d+)___/g, (_, i) => {
+            const block = codeBlocks[parseInt(i)];
+            const langClass = block.lang ? `language-${block.lang.toLowerCase()}` : 'language-plaintext';
+            const langLabel = block.lang ? block.lang.toUpperCase() : 'CODE';
+            return `<div class="code-block-wrapper">
+                <div class="code-block-header">
+                    <span class="code-block-lang">${langLabel}</span>
+                    <button class="code-block-copy-btn" onclick="copyCodeBlock(this)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                        Copy
+                    </button>
+                </div>
+                <pre><code class="${langClass}">${block.code}</code></pre>
+            </div>`;
+        });
+
+        text = text.split(/\n\n+/).map(para => {
+            const trimmed = para.trim();
             if (!trimmed) return '';
-            if (trimmed.startsWith('___CODE_BLOCK_')) return trimmed; // Ignore code placeholders
-            if (trimmed.startsWith('<img')) return trimmed; // Ignore image wrappers
+            if (trimmed.startsWith('<table') || trimmed.startsWith('<div class="code-block-wrapper"') || trimmed.startsWith('<img') || trimmed.startsWith('<h')) {
+                return trimmed;
+            }
             return '<p>' + trimmed.replace(/\n/g, '<br>') + '</p>';
         }).join('');
 
-        // 4. Re-inject formatted Code Blocks
-        codeBlocks.forEach((block, index) => {
-            const languageClass = block.lang ? `language-${block.lang.toLowerCase()}` : 'language-plaintext';
-            const langLabel = block.lang ? block.lang.toUpperCase() : 'CODE';
-            const blockHtml = `
-                <div class="code-block-wrapper">
-                    <div class="code-block-header">
-                        <span class="code-block-lang">${langLabel}</span>
-                        <button class="code-block-copy-btn" onclick="copyCodeBlock(this)">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                            Copy
-                        </button>
-                    </div>
-                    <pre><code class="${languageClass}">${block.code}</code></pre>
-                </div>
-            `;
-            html = html.replace(`___CODE_BLOCK_${index}___`, blockHtml);
-        });
-
-        return html;
+        return text;
     }
 
-    // Image download utility
+    // ==================== ATTACHMENTS ====================
     async function downloadImage(url, filename) {
         try {
             showToast('Downloading image...');
@@ -435,11 +560,9 @@ CRITICAL RULES:
         }
     }
 
-    // ─── Attachments Rendering ───
     function renderAttachments() {
         const previewWelcome = document.getElementById('attachmentPreviewWelcome');
         const previewMain = document.getElementById('attachmentPreviewMain');
-
         const renderTo = (container) => {
             if (!container) return;
             container.innerHTML = '';
@@ -458,7 +581,6 @@ CRITICAL RULES:
                 }
                 container.appendChild(div);
             });
-
             container.querySelectorAll('button').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const idx = parseInt(e.currentTarget.getAttribute('data-idx'));
@@ -468,12 +590,11 @@ CRITICAL RULES:
                 });
             });
         };
-
         renderTo(previewWelcome);
         renderTo(previewMain);
     }
 
-    // ─── Web Search Toggle Logic ───
+    // ==================== TOGGLE FUNCTIONS ====================
     function toggleWebSearch() {
         if (!navigator.onLine) {
             showToast('Internet connection required for Web Search');
@@ -482,12 +603,36 @@ CRITICAL RULES:
         isWebSearchEnabled = !isWebSearchEnabled;
         btnSearchWelcome.classList.toggle('active', isWebSearchEnabled);
         btnSearchMain.classList.toggle('active', isWebSearchEnabled);
-        // showToast(isWebSearchEnabled ? 'Web Search Enabled' : 'Web Search Disabled');
     }
     btnSearchWelcome.addEventListener('click', toggleWebSearch);
     btnSearchMain.addEventListener('click', toggleWebSearch);
 
-    // ─── Auto-scroll control ───
+    function toggleThinking() {
+        isThinkingEnabled = !isThinkingEnabled;
+        btnThinkWelcome.classList.toggle('active', isThinkingEnabled);
+        btnThinkMain.classList.toggle('active', isThinkingEnabled);
+    }
+    btnThinkWelcome.addEventListener('click', toggleThinking);
+    btnThinkMain.addEventListener('click', toggleThinking);
+
+    function showThinkingIndicator() {
+        hideThinkingIndicator();
+        const bubble = document.createElement('div');
+        bubble.className = 'thinking-indicator';
+        bubble.innerHTML = '<span class="think-text">THINKING</span>';
+        chatArea.appendChild(bubble);
+        currentThinkingBubble = bubble;
+        scrollToBottom();
+    }
+
+    function hideThinkingIndicator() {
+        if (currentThinkingBubble) {
+            currentThinkingBubble.remove();
+            currentThinkingBubble = null;
+        }
+    }
+
+    // ==================== SCROLL ====================
     function updateScrollState() {
         const threshold = 50;
         const diff = chatArea.scrollHeight - chatArea.clientHeight - chatArea.scrollTop;
@@ -501,10 +646,7 @@ CRITICAL RULES:
     }
 
     chatArea.addEventListener('scroll', updateScrollState);
-
-    chatArea.addEventListener('touchstart', () => {
-        autoScroll = false;
-    }, { passive: true });
+    chatArea.addEventListener('touchstart', () => { autoScroll = false; }, { passive: true });
 
     function scrollToBottom() {
         chatArea.scrollTop = chatArea.scrollHeight;
@@ -516,14 +658,9 @@ CRITICAL RULES:
         scrollDownBtn.addEventListener('click', scrollToBottom);
     }
 
-    // ─── Audio Cleanup / Stop TTS ───
     function stopTTS() {
-        if (window.speechSynthesis) {
-            window.speechSynthesis.cancel();
-        }
-        if (window.PiperTTS && typeof window.PiperTTS.stop === 'function') {
-            window.PiperTTS.stop();
-        }
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
+        if (window.PiperTTS && typeof window.PiperTTS.stop === 'function') window.PiperTTS.stop();
         audioPlayer.classList.add('hidden');
         audioProgressFill.style.width = '0%';
         document.querySelectorAll('.speaking').forEach(el => el.classList.remove('speaking'));
@@ -534,16 +671,12 @@ CRITICAL RULES:
         currentUtterance = null;
     }
 
-    // ─── Simulated Streaming Effect (Cursor line completely removed) ───
     function simulateTyping(element, text, role, onComplete) {
         let index = 0;
         element.innerHTML = '';
-
-        // Ensure intervals are cleared if multiple calls happen
         if (typingInterval) clearInterval(typingInterval);
-
         typingInterval = setInterval(() => {
-            index += 4; // Reveal 4 characters per tick for smooth but fast typing
+            index += 4;
             if (index >= text.length) {
                 index = text.length;
                 clearInterval(typingInterval);
@@ -558,7 +691,7 @@ CRITICAL RULES:
         }, 15);
     }
 
-    // ─── Message rendering (Updated for Image Hide Logic) ───
+    // ==================== MESSAGE RENDERING ====================
     function appendMessage(role, content, attachments = [], animate = false, isImage = false, generatedImgUrl = '') {
         if (welcomeScreen.style.display !== 'none') {
             welcomeScreen.style.display = 'none';
@@ -575,8 +708,8 @@ CRITICAL RULES:
         if (attachments && attachments.length > 0) {
             attachmentHtml = '<div class="chat-message-attachments">';
             attachments.forEach(att => {
-                if(att.type.startsWith('image/')) {
-                    attachmentHtml += `<img src="${att.url}" alt="attached image" style="max-width: 240px; max-height: 240px; width: auto; height: auto; object-fit: contain; border-radius: 12px; margin-top: 4px;">`;
+                if (att.type.startsWith('image/')) {
+                    attachmentHtml += `<img src="${att.url}" alt="attached image" style="max-width: 240px; max-height: 240px; border-radius: 12px; margin-top: 4px;">`;
                 } else {
                     attachmentHtml += `<div style="background:rgba(0,0,0,0.15); padding:8px 12px; border-radius:8px; display:inline-flex; align-items:center; gap:8px; font-size:0.85rem;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> ${att.name}</div>`;
                 }
@@ -584,7 +717,6 @@ CRITICAL RULES:
             attachmentHtml += '</div>';
         }
 
-        // Action Buttons Setup (Download if image, standard buttons otherwise)
         let actionButtonsHtml = '';
         if (isImage) {
             actionButtonsHtml = `
@@ -595,7 +727,7 @@ CRITICAL RULES:
         } else if (role === 'user') {
             actionButtonsHtml = `
                 <button class="edit-msg-btn" title="Edit message">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pencil"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
                 </button>
                 <button class="copy-msg-btn" title="Copy message">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
@@ -615,10 +747,24 @@ CRITICAL RULES:
             `;
         }
 
+        const reasoningMatch = content.match(/<!--REASONING:([\s\S]*?)-->/);
+        let reasoningHtml = '';
+        if (reasoningMatch && reasoningMatch[1]) {
+            const reasoningText = reasoningMatch[1];
+            content = content.replace(reasoningMatch[0], '').trim();
+            reasoningHtml = `
+                <button class="reasoning-toggle" onclick="this.nextElementSibling.classList.toggle('expanded'); this.textContent = this.textContent.includes('Show') ? 'Hide reasoning' : 'Show reasoning'">
+                    Show reasoning
+                </button>
+                <div class="reasoning-content">${escapeHtml(reasoningText)}</div>
+            `;
+        }
+
         wrapper.innerHTML = `
             <div class="message ${role === 'user' ? 'user-message' : 'ai-message'}">
                 ${attachmentHtml}
                 <div class="message-text"></div>
+                ${reasoningHtml}
                 <div class="message-footer"><span class="message-time">${time}</span></div>
             </div>
             <div class="msg-actions">
@@ -628,11 +774,8 @@ CRITICAL RULES:
         chatArea.appendChild(wrapper);
 
         const textEl = wrapper.querySelector('.message-text');
-
         if (animate) {
-            simulateTyping(textEl, content, role, () => {
-                // Formatting done inside simulateTyping
-            });
+            simulateTyping(textEl, content, role);
         } else {
             textEl.innerHTML = role === 'ai' ? simpleMarkdown(content) : escapeHtml(content);
             if (window.Prism) Prism.highlightAllUnder(wrapper);
@@ -645,7 +788,6 @@ CRITICAL RULES:
         }
 
         currentConversation.push({ role, content, attachments, timestamp: Date.now() });
-
         if (role === 'user' && !activeConversationId && currentConversation.filter(m => m.role === 'user').length === 1) saveCurrentConversation(true);
         if (role === 'user' && activeConversationId && currentConversation.filter(m => m.role === 'user').length === 1) updateConversationTitle(activeConversationId, content);
         persistData();
@@ -653,10 +795,16 @@ CRITICAL RULES:
 
     function showTypingIndicator(show) {
         if (show && !typingIndicatorEl) {
-            const div = document.createElement('div'); div.className = 'typing-indicator';
+            const div = document.createElement('div');
+            div.className = 'typing-indicator';
             div.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
-            chatArea.appendChild(div); scrollToBottom(); typingIndicatorEl = div;
-        } else if (!show && typingIndicatorEl) { typingIndicatorEl.remove(); typingIndicatorEl = null; }
+            chatArea.appendChild(div);
+            scrollToBottom();
+            typingIndicatorEl = div;
+        } else if (!show && typingIndicatorEl) {
+            typingIndicatorEl.remove();
+            typingIndicatorEl = null;
+        }
     }
 
     function setActiveInput(type) {
@@ -695,10 +843,7 @@ CRITICAL RULES:
         if (!conv) return;
         activeConversationId = convId; currentConversation = [...conv.messages];
         chatArea.innerHTML = ''; typingIndicatorEl = null;
-
-        // Re-render historical messages without animation
         currentConversation.forEach(msg => {
-            // Check if it's an image from history
             let isImage = false;
             let imgUrl = '';
             if (msg.role === 'ai' && msg.content.includes('Here is your image:') && msg.content.includes('![')) {
@@ -706,12 +851,9 @@ CRITICAL RULES:
                 const match = msg.content.match(/\((https:\/\/image\.pollinations\.ai[^)]+)\)/);
                 if (match) imgUrl = match[1];
             }
-
             appendMessage(msg.role, msg.content, msg.attachments, false, isImage, imgUrl);
-            // Quick cleanup of duplicate push from appendMessage
             currentConversation.pop();
         });
-
         welcomeScreen.style.display = 'none'; chatArea.style.display = 'flex';
         setActiveInput('chat'); scrollToBottom(); renderRecentChats();
         localStorage.setItem('activeConversationId', activeConversationId);
@@ -759,18 +901,12 @@ CRITICAL RULES:
 
     function buildLocalPrompt(newUserMessage) {
         const systemPrompt = customInstructions.trim() ? (MASTER_SYSTEM_PROMPT + "\n\nUser Custom Instructions:\n" + customInstructions.trim()) : MASTER_SYSTEM_PROMPT;
-
         let prompt = '<|begin_of_text|>';
         prompt += `<|start_header_id|>system<|end_header_id|>\n${systemPrompt}<|eot_id|>`;
-
         for (const msg of currentConversation) {
-            if (msg.role === 'user') {
-                prompt += `<|start_header_id|>user<|end_header_id|>\n${msg.content}<|eot_id|>`;
-            } else if (msg.role === 'ai') {
-                prompt += `<|start_header_id|>assistant<|end_header_id|>\n${msg.content}<|eot_id|>`;
-            }
+            if (msg.role === 'user') prompt += `<|start_header_id|>user<|end_header_id|>\n${msg.content}<|eot_id|>`;
+            else if (msg.role === 'ai') prompt += `<|start_header_id|>assistant<|end_header_id|>\n${msg.content}<|eot_id|>`;
         }
-
         prompt += `<|start_header_id|>user<|end_header_id|>\n${newUserMessage}<|eot_id|>`;
         prompt += `<|start_header_id|>assistant<|end_header_id|>\n`;
         return prompt;
@@ -781,15 +917,11 @@ CRITICAL RULES:
         const svgs = document.querySelectorAll('#btnSend svg, #btnSendWelcome svg');
         svgs.forEach(svg => {
             if (generating) {
-                // Stop Square Icon
                 svg.innerHTML = `<rect x="6" y="6" width="12" height="12" rx="2" ry="2" fill="currentColor" stroke="currentColor" stroke-width="2"/>`;
             } else {
-                // Send Icon
                 svg.innerHTML = `<path d="m5 12 7-7 7 7" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 19V5" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
             }
         });
-
-        // Ensure buttons stay enabled during generation so we can click STOP
         document.getElementById('btnSend').disabled = false;
         document.getElementById('btnSendWelcome').disabled = false;
     }
@@ -799,32 +931,28 @@ CRITICAL RULES:
         const sendBtn = activeInput === 'welcome' ? btnSendWelcome : btnSend;
         const hasText = inputEl.value.trim().length > 0;
         const hasAttachments = pendingAttachments.length > 0;
-
         if (!isGenerating) {
             sendBtn.disabled = !(hasText || hasAttachments);
         }
     }
 
-    // ============================================
-    // THE MASTER MESSAGE SENDER
-    // ============================================
+    // ==================== MAIN SEND ====================
     async function sendMessage() {
         if (isGenerating) {
-            // STOP Logic
             if (globalAbortController) globalAbortController.abort();
             if (typingInterval) clearInterval(typingInterval);
             isGenerating = false;
             toggleSendStop(false);
             showTypingIndicator(false);
+            hideThinkingIndicator();
             toggleSendButtonState();
             return;
         }
 
-        stopTTS(); // Clean up audio on new user msg
+        stopTTS();
         const inputEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
         const sendBtn = activeInput === 'welcome' ? btnSendWelcome : btnSend;
         const text = inputEl.value.trim();
-
         if (!text && pendingAttachments.length === 0) return;
         if (!modelReady && !apiKey) {
             showToast("AI engine not ready. Set API key in Settings or wait.");
@@ -832,8 +960,6 @@ CRITICAL RULES:
         }
 
         inputEl.value = ''; inputEl.style.height = 'auto';
-
-        // Format prompt explicitly for attachments if any
         let fullPrompt = text;
         const attachmentsCopy = [...pendingAttachments];
         let hasImage = false;
@@ -842,7 +968,6 @@ CRITICAL RULES:
         if (attachmentsCopy.length > 0) {
             const filesStr = attachmentsCopy.map(a => a.name).join(', ');
             fullPrompt += `\n[User attached files: ${filesStr}]`;
-
             const imgAttachment = attachmentsCopy.find(a => a.type.startsWith('image/'));
             if (imgAttachment) {
                 hasImage = true;
@@ -850,37 +975,20 @@ CRITICAL RULES:
             }
         }
 
-        // ================= AGENTIC ROUTER: Image Generation =================
-        let isImageIntent = false;
-        let imgPrompt = "";
-
-        // Broad match to catch "generate an image of a cat", "show me a picture of space", "i want a photo of a dog"
         const imgRegex = /(?:generate|create|make|draw|show me|want).{0,40}(?:image|picture|photo|drawing|pic(?:ture)?)\s+(?:of\s+)?(.+)/i;
-        // Catch direct draw commands like "draw a futuristic city"
         const drawRegex = /^(?:please\s+)?(?:draw|paint|sketch)\s+(.+)/i;
-
-        if (imgRegex.test(text)) {
-            isImageIntent = true;
-            imgPrompt = text.match(imgRegex)[1].trim();
-        } else if (drawRegex.test(text)) {
-            isImageIntent = true;
-            imgPrompt = text.match(drawRegex)[1].trim();
-        }
-
-        if (isImageIntent && navigator.onLine) {
+        if ((imgRegex.test(text) || drawRegex.test(text)) && navigator.onLine) {
+            let imgPrompt = '';
+            if (imgRegex.test(text)) imgPrompt = text.match(imgRegex)[1].trim();
+            else imgPrompt = text.match(drawRegex)[1].trim();
             appendMessage('user', text, attachmentsCopy, false);
             pendingAttachments = []; renderAttachments();
-
-            showTypingIndicator(true);
+            showTypingIndicator(true);  // show dots while generating image
             toggleSendStop(true);
-
-            // Pollinations.ai free endpoint parses the prompt naturally
             const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(imgPrompt)}?nologo=true`;
-
             const img = new Image();
             img.onload = () => {
                 showTypingIndicator(false);
-                // Append message with isImage = true, and pass the URL
                 appendMessage('ai', `Here is your image:\n\n![${escapeHtml(imgPrompt)}](${imgUrl})`, [], true, true, imgUrl);
                 toggleSendStop(false);
                 saveCurrentConversation(false);
@@ -891,39 +999,29 @@ CRITICAL RULES:
                 toggleSendStop(false);
             };
             img.src = imgUrl;
-            return; // Stop further processing
-        } else if (isImageIntent && !navigator.onLine) {
-            showToast("Internet connection required to generate images.");
+            return;
         }
 
-        // Proceed to append regular message
         appendMessage('user', text || '[Attachment Only]', attachmentsCopy, false);
         pendingAttachments = []; renderAttachments();
-
         autoScroll = true;
-        showTypingIndicator(true);
-        toggleSendStop(true); // Turns into STOP button
-
+        toggleSendStop(true);
         globalAbortController = new AbortController();
         const signal = globalAbortController.signal;
 
         try {
             let finalPromptForLLM = fullPrompt;
-
-            // ================= AGENTIC ROUTER: Web Search Context =================
             if (isWebSearchEnabled && navigator.onLine) {
                 showToast("Searching the web...");
                 try {
-                    // Call the Android Bridge for free web search
                     const searchResults = await new Promise((resolve, reject) => {
                         if (window.AndroidTFLite && window.AndroidTFLite.performWebSearch) {
                             const callbackId = 'search_' + Date.now();
                             pendingCallbacks[callbackId] = resolve;
                             window.AndroidTFLite.performWebSearch(text, callbackId);
                         } else {
-                            // FALLBACK: Pure JS Wikipedia scraper for PC/Browser preview where Android is unavailable
                             const cleanQuery = text.replace(/(what is|who is|where is|tell me about|the) /gi, "").trim();
-                            fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&origin=*&search=${encodeURIComponent(cleanQuery)}&limit=2&namespace=0&format=json`)
+                            fetch(`https://en.wikipedia.org/w/api.php?action=opensearch&origin=*&search=${encodeURIComponent(cleanQuery)}&limit=3&namespace=0&format=json`)
                                 .then(res => res.json())
                                 .then(data => {
                                     if (data && data.length > 2 && data[2].length > 0) {
@@ -935,51 +1033,79 @@ CRITICAL RULES:
                                 .catch(() => resolve(""));
                         }
                     });
-
                     if (searchResults && searchResults.trim() !== "") {
                         finalPromptForLLM = `[Web Search Context: ${searchResults}]\n\nAnswer the user using the above context. User Query: ${text}`;
                     }
-                } catch(e) {
+                } catch (e) {
                     console.warn("Search failed", e);
-                    showToast("Web search failed, falling back to local knowledge.");
+                    showToast("Web search failed, falling back.");
                 }
             } else if (isWebSearchEnabled && !navigator.onLine) {
                 showToast("Offline. Bypassing Web Search.");
             }
 
-            let response;
-            if (apiKey) {
-                const messages = currentConversation.map(m => ({ role: m.role === 'ai' ? 'assistant' : 'user', content: m.content }));
-                // Inject our modified search prompt into the final message instead of the plain text
+            if (apiKey && apiKey.startsWith('gsk_') && isThinkingEnabled) {
+                // Groq streaming with reasoning – show blinking THINKING bubble
+                const messages = currentConversation.map(m => ({
+                    role: m.role === 'ai' ? 'assistant' : 'user',
+                    content: m.content
+                }));
                 messages[messages.length - 1].content = finalPromptForLLM;
+                const systemInstruction = customInstructions.trim() ?
+                    (MASTER_SYSTEM_PROMPT + "\n\nUser Custom Instructions:\n" + customInstructions.trim()) :
+                    MASTER_SYSTEM_PROMPT;
 
-                const systemInstruction = customInstructions.trim() ? (MASTER_SYSTEM_PROMPT + "\n\nUser Custom Instructions:\n" + customInstructions.trim()) : MASTER_SYSTEM_PROMPT;
+                let reasoningText = '';
+                let answerText = '';
+                showThinkingIndicator();
 
-                try {
-                    response = await callAIAPI(messages, apiKey, systemInstruction, signal, base64Image);
-                } catch (apiErr) {
-                    if (apiErr.name === 'AbortError') throw apiErr; // Pass abort up
-                    console.warn('Cloud API error:', apiErr);
-                    if (modelReady && window.AndroidTFLite) {
-                        showToast('API error, trying local model...');
-                        response = await handleLocalEngineFallback(finalPromptForLLM, hasImage, base64Image);
-                    } else {
-                        throw new Error(`API call failed: ${apiErr.message}`);
+                callGroqStreaming(
+                    messages, apiKey, systemInstruction, signal, base64Image,
+                    "medium",
+                    (reasoning) => { reasoningText = reasoning; },
+                    (chunk) => { answerText += chunk; },
+                    () => {
+                        hideThinkingIndicator();
+                        const finalMsg = reasoningText ?
+                            `${answerText}\n\n<!--REASONING:${reasoningText}-->` :
+                            answerText;
+                        appendMessage('ai', finalMsg, [], true);
+                        toggleSendStop(false);
+                        saveCurrentConversation(false);
+                    },
+                    (err) => {
+                        hideThinkingIndicator();
+                        fallbackToNonStreaming(apiKey, messages, systemInstruction, signal, base64Image);
                     }
-                }
+                );
+            } else if (apiKey) {
+                // Non‑streaming – show typing indicator
+                showTypingIndicator(true);
+                const messages = currentConversation.map(m => ({
+                    role: m.role === 'ai' ? 'assistant' : 'user',
+                    content: m.content
+                }));
+                messages[messages.length - 1].content = finalPromptForLLM;
+                const systemInstruction = customInstructions.trim() ?
+                    (MASTER_SYSTEM_PROMPT + "\n\nUser Custom Instructions:\n" + customInstructions.trim()) :
+                    MASTER_SYSTEM_PROMPT;
+                let response = await callAIAPI(messages, apiKey, systemInstruction, signal, base64Image);
+                // Strip any <think> tags that might have slipped through
+                response = removeThinkTags(response);
+                showTypingIndicator(false);
+                appendMessage('ai', response, [], true);
             } else {
-                response = await handleLocalEngineFallback(finalPromptForLLM, hasImage, base64Image);
+                showTypingIndicator(true);
+                const response = await handleLocalEngineFallback(finalPromptForLLM, hasImage, base64Image);
+                showTypingIndicator(false);
+                appendMessage('ai', response, [], true);
             }
-
-            showTypingIndicator(false);
-            appendMessage('ai', response, [], true); // True for animate/typing effect
-
         } catch (err) {
             if (err.name === 'AbortError') {
                 showToast('Generation stopped.');
-                // Append partial info or ignore
             } else {
                 showTypingIndicator(false);
+                hideThinkingIndicator();
                 appendMessage('ai', '⚠️ ' + (err.message || 'Unknown error'), [], false);
             }
         } finally {
@@ -991,7 +1117,16 @@ CRITICAL RULES:
         }
     }
 
-    // Abstracted to handle 1B Text vs 4B Vision Model Swapping safely
+    async function fallbackToNonStreaming(apiKey, messages, systemInstruction, signal, base64Image) {
+        try {
+            let response = await callGroqAPI(messages, apiKey, systemInstruction, signal, base64Image);
+            response = removeThinkTags(response);
+            appendMessage('ai', response, [], true);
+        } catch (e) {
+            appendMessage('ai', '⚠️ ' + (e.message || 'Fallback failed'), [], false);
+        }
+    }
+
     async function handleLocalEngineFallback(prompt, hasImage, base64Image) {
         if (!modelReady || !window.AndroidTFLite) throw new Error('Local engine not initialized.');
         if (hasImage && window.AndroidTFLite.runVisionModel) {
@@ -1067,7 +1202,7 @@ CRITICAL RULES:
         URL.revokeObjectURL(url); showToast('Chat exported');
     }
 
-    // Message Actions (Copy, Speak, Edit, Download)
+    // Message actions (unchanged from previous working version, but fully included)
     chatArea.addEventListener('click', (e) => {
         const copyBtn = e.target.closest('.copy-msg-btn');
         const speakBtn = e.target.closest('.speak-msg-btn');
@@ -1086,31 +1221,20 @@ CRITICAL RULES:
         }
 
         if (editBtn) {
-            stopTTS(); // Explicitly stop audio if user edits the message
-
+            stopTTS();
             const wrapper = editBtn.closest('.message-wrapper');
             let content = wrapper?.getAttribute('data-content') || '';
-            if (content === '[Attachment Only]') content = ''; // Clean up fallback text
-
+            if (content === '[Attachment Only]') content = '';
             const activeInputEl = activeInput === 'welcome' ? welcomeUserInput : userInput;
             activeInputEl.value = content;
             activeInputEl.style.height = 'auto';
             activeInputEl.style.height = Math.min(activeInputEl.scrollHeight, 120) + 'px';
             activeInputEl.focus();
             toggleSendButtonState();
-
-            // Slicing logic: remove this message and everything after it
             const wrappers = Array.from(chatArea.querySelectorAll('.message-wrapper'));
             const index = wrappers.indexOf(wrapper);
-
             if (index !== -1) {
-                if (index === 0 && wrappers.length <= 2) {
-                    // It's basically a new chat again
-                }
-
-                for (let i = wrappers.length - 1; i >= index; i--) {
-                    wrappers[i].remove();
-                }
+                for (let i = wrappers.length - 1; i >= index; i--) wrappers[i].remove();
                 currentConversation = currentConversation.slice(0, index);
                 saveCurrentConversation(false);
             }
@@ -1119,84 +1243,49 @@ CRITICAL RULES:
         if (speakBtn) {
             const wrapper = speakBtn.closest('.message-wrapper');
             const content = wrapper?.getAttribute('data-content') || '';
-
-            // OFFLINE TTS BRIDGE CALL
             if (window.PiperTTS && typeof window.PiperTTS.speak === 'function') {
-                stopTTS(); // Clean state before new speech
-
+                stopTTS();
                 currentUtterance = { _isPiper: true };
                 audioPlayer.classList.remove('hidden');
                 audioProgressFill.style.width = '0%';
                 audioIconPlay.style.display = 'none';
                 audioIconPause.style.display = 'block';
                 speakBtn.classList.add('speaking');
-
                 window.PiperTTS.speak(content);
-
                 let simulatedProgress = 0;
                 let expectedDuration = (content.length / 15) * 1000;
                 let intervalTime = 100;
                 let increment = (intervalTime / expectedDuration) * 100;
-
                 currentUtterance._progressInterval = setInterval(() => {
                     simulatedProgress += increment;
                     if (simulatedProgress > 95) simulatedProgress = 95;
                     audioProgressFill.style.width = `${simulatedProgress}%`;
                 }, intervalTime);
-
-                // Auto close fallback for offline TTS
                 setTimeout(() => {
-                    if (currentUtterance && currentUtterance._isPiper) {
-                        stopTTS();
-                    }
+                    if (currentUtterance && currentUtterance._isPiper) stopTTS();
                 }, expectedDuration + 2000);
-
             } else if (window.speechSynthesis) {
-                stopTTS(); // Clean state before new speech
-
+                stopTTS();
                 currentUtterance = new SpeechSynthesisUtterance(content);
-                const totalLength = content.length || 1;
-
                 audioPlayer.classList.remove('hidden');
                 audioProgressFill.style.width = '0%';
                 audioIconPlay.style.display = 'none';
                 audioIconPause.style.display = 'block';
-
                 currentUtterance.onstart = () => {
                     speakBtn.classList.add('speaking');
-
-                    // Fallback simulated progress for Android WebView where onboundary might fail
                     let simulatedProgress = 0;
                     let expectedDuration = (content.length / 15) * 1000;
                     let intervalTime = 100;
                     let increment = (intervalTime / expectedDuration) * 100;
-
                     currentUtterance._progressInterval = setInterval(() => {
                         simulatedProgress += increment;
                         if (simulatedProgress > 95) simulatedProgress = 95;
                         audioProgressFill.style.width = `${simulatedProgress}%`;
                     }, intervalTime);
                 };
-
-                currentUtterance.onboundary = (event) => {
-                    // If true onboundary fires, stop the simulation
-                    if (currentUtterance && currentUtterance._progressInterval) {
-                        clearInterval(currentUtterance._progressInterval);
-                        currentUtterance._progressInterval = null;
-                    }
-                    if (event.name === 'word') {
-                        const progressPercentage = (event.charIndex / totalLength) * 100;
-                        audioProgressFill.style.width = `${Math.min(progressPercentage, 100)}%`;
-                    }
-                };
-
-                const finishAudio = () => {
-                    stopTTS();
-                };
-
+                const finishAudio = () => stopTTS();
                 currentUtterance.onend = finishAudio;
                 currentUtterance.onerror = finishAudio;
-
                 window.speechSynthesis.speak(currentUtterance);
             } else {
                 showToast('Speech synthesis not supported');
@@ -1212,7 +1301,6 @@ CRITICAL RULES:
         }
     });
 
-    // Audio Player Controls
     audioPlayPauseBtn.addEventListener('click', () => {
         if (window.speechSynthesis) {
             if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
@@ -1243,6 +1331,7 @@ CRITICAL RULES:
         welcomeLogo.src = dark ? 'logo-white.png' : 'logo-black.png';
         if (splashLogoImg) splashLogoImg.src = dark ? 'logo-white.png' : 'logo-black.png';
     }
+
     function setTheme(dark) {
         if (dark) {
             document.body.classList.add('dark'); themeLabel.textContent = 'Dark';
@@ -1254,6 +1343,7 @@ CRITICAL RULES:
             localStorage.setItem('theme', 'light'); updateLogos(false);
         }
     }
+
     const savedTheme = localStorage.getItem('theme');
     setTheme(savedTheme === 'dark');
     themeBtn.addEventListener('click', () => setTheme(!document.body.classList.contains('dark')));
@@ -1314,7 +1404,6 @@ CRITICAL RULES:
 
     searchInput.addEventListener('input', renderRecentChats);
 
-    // ─── Sidebar toggle (Clean CSS Toggles) ───
     function openSidebar() {
         sidebar.classList.add('open');
         overlay.classList.add('active');
@@ -1336,11 +1425,9 @@ CRITICAL RULES:
         document.body.classList.toggle('sidebar-collapsed');
     });
 
-    // ─── Relaxed Swipe Gestures (Mobile Only) ───
     function initSwipeGestures() {
         let touchStartX = 0;
         let touchStartY = 0;
-
         document.addEventListener('touchstart', (e) => {
             touchStartX = e.changedTouches[0].clientX;
             touchStartY = e.changedTouches[0].clientY;
@@ -1349,28 +1436,17 @@ CRITICAL RULES:
         document.addEventListener('touchend', (e) => {
             const touchEndX = e.changedTouches[0].clientX;
             const touchEndY = e.changedTouches[0].clientY;
-
             const deltaX = touchEndX - touchStartX;
             const deltaY = touchEndY - touchStartY;
-
-            // Relaxed swipe logic: Horizontal distance must be greater than vertical, and exceed 40px
             if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
-
-                // FIX: Close keyboard if an input is focused during a swipe
                 if (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT') {
                     document.activeElement.blur();
                 }
-
                 const isOpen = sidebar.classList.contains('open');
                 const isMessage = e.target.closest('.message-wrapper');
-
                 if (deltaX > 0 && !isOpen) {
-                    // Swipe right to OPEN
-                    if (!isMessage || touchStartX < 30) {
-                        openSidebar();
-                    }
+                    if (!isMessage || touchStartX < 30) openSidebar();
                 } else if (deltaX < 0 && isOpen) {
-                    // Swipe left to CLOSE
                     closeSidebar();
                 }
             }
@@ -1396,38 +1472,29 @@ CRITICAL RULES:
         saveCustomInstructions(customInstructionsInput.value.trim());
         apiKey = apiKeyInput.value.trim();
         localStorage.setItem('apiKey', apiKey);
-        if (selectedAccent !== currentAccent) {
-            applyAccent(selectedAccent);
-        }
+        if (selectedAccent !== currentAccent) applyAccent(selectedAccent);
         showToast('Settings saved');
         settingsModalOverlay.classList.add('hidden');
     });
     settingsModalOverlay.addEventListener('click', (e) => { if (e.target === settingsModalOverlay) settingsModalOverlay.classList.add('hidden'); });
 
-    // ==================== User Account Modal ====================
+    // User Account Modal
     const userAccountModal = document.getElementById('userAccountModal');
-    const btnUserAccount = document.getElementById('btnUserAccount');
-    const btnUserAccountClose = document.getElementById('btnUserAccountClose');
-    const userOptionBtns = document.querySelectorAll('.user-option-btn');
-
-    btnUserAccount.addEventListener('click', () => { userAccountModal.classList.remove('hidden'); });
-    btnUserAccountClose.addEventListener('click', () => { userAccountModal.classList.add('hidden'); });
+    document.getElementById('btnUserAccount').addEventListener('click', () => userAccountModal.classList.remove('hidden'));
+    document.getElementById('btnUserAccountClose').addEventListener('click', () => userAccountModal.classList.add('hidden'));
     userAccountModal.addEventListener('click', (e) => { if (e.target === userAccountModal) userAccountModal.classList.add('hidden'); });
-
-    userOptionBtns.forEach(btn => {
+    document.querySelectorAll('.user-option-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            const provider = btn.getAttribute('data-provider');
-            showToast(`${provider === 'google' ? 'Google' : provider === 'facebook' ? 'Facebook' : 'Phone'} login coming soon!`);
+            showToast('Login coming soon!');
             userAccountModal.classList.add('hidden');
         });
     });
 
-    // ==================== Attach popup ====================
+    // Attach popup (unchanged)
     function createAttachPopup(attachBtn) {
         if (attachBtn._attachPopup) return attachBtn._attachPopup;
         const popup = document.createElement('div');
         popup.className = 'attach-popup hidden';
-
         const cameraBtn = document.createElement('button');
         cameraBtn.className = 'attach-option';
         cameraBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-camera-icon lucide-camera"><path d="M13.997 4a2 2 0 0 1 1.76 1.05l.486.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l.489-.904A2 2 0 0 1 10.004 4z"/><circle cx="12" cy="13" r="3"/></svg> Camera`;
@@ -1437,33 +1504,20 @@ CRITICAL RULES:
         const filesBtn = document.createElement('button');
         filesBtn.className = 'attach-option';
         filesBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-file-icon lucide-file"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/></svg> Files`;
-
         popup.appendChild(cameraBtn);
         popup.appendChild(photosBtn);
         popup.appendChild(filesBtn);
-
         const inputContainer = attachBtn.closest('.input-container');
-        if (inputContainer) {
-            inputContainer.appendChild(popup);
-        } else {
-            document.body.appendChild(popup);
-        }
-
+        if (inputContainer) inputContainer.appendChild(popup); else document.body.appendChild(popup);
         attachBtn._attachPopup = popup;
-
         const handleFileInput = (input) => {
             input.addEventListener('change', (e) => {
                 const files = e.target.files;
                 if (!files || files.length === 0) return;
-
                 Array.from(files).forEach(file => {
                     const reader = new FileReader();
                     reader.onload = (ev) => {
-                        pendingAttachments.push({
-                            name: file.name,
-                            type: file.type,
-                            url: ev.target.result
-                        });
+                        pendingAttachments.push({ name: file.name, type: file.type, url: ev.target.result });
                         renderAttachments();
                         toggleSendButtonState();
                     };
@@ -1472,32 +1526,27 @@ CRITICAL RULES:
             });
             input.click();
         };
-
         cameraBtn.addEventListener('click', () => {
             popup.classList.add('hidden');
             const input = document.createElement('input');
-            input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
-            input.style.display = 'none';
+            input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment'; input.style.display = 'none';
             document.body.appendChild(input);
             handleFileInput(input);
         });
         photosBtn.addEventListener('click', () => {
             popup.classList.add('hidden');
             const input = document.createElement('input');
-            input.type = 'file'; input.accept = 'image/*';
-            input.style.display = 'none';
+            input.type = 'file'; input.accept = 'image/*'; input.style.display = 'none';
             document.body.appendChild(input);
             handleFileInput(input);
         });
         filesBtn.addEventListener('click', () => {
             popup.classList.add('hidden');
             const input = document.createElement('input');
-            input.type = 'file'; input.accept = '*/*'; input.multiple = true;
-            input.style.display = 'none';
+            input.type = 'file'; input.accept = '*/*'; input.multiple = true; input.style.display = 'none';
             document.body.appendChild(input);
             handleFileInput(input);
         });
-
         return popup;
     }
 
@@ -1509,9 +1558,9 @@ CRITICAL RULES:
 
     document.getElementById('btnAttach').addEventListener('click', (e) => { e.stopPropagation(); toggleAttachPopup(document.getElementById('btnAttach')); });
     document.getElementById('btnAttachWelcome').addEventListener('click', (e) => { e.stopPropagation(); toggleAttachPopup(document.getElementById('btnAttachWelcome')); });
-    document.addEventListener('click', (e) => { if (!e.target.closest('.attach-popup') && !e.target.closest('.icon-btn')) { document.querySelectorAll('.attach-popup').forEach(p => p.classList.add('hidden')); } });
+    document.addEventListener('click', (e) => { if (!e.target.closest('.attach-popup') && !e.target.closest('.icon-btn')) document.querySelectorAll('.attach-popup').forEach(p => p.classList.add('hidden')); });
 
-    // ==================== Mic ====================
+    // Mic (unchanged)
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     let recognition = null;
     let isListening = false;
@@ -1540,7 +1589,6 @@ CRITICAL RULES:
         isListening = true;
         micBtn.classList.add('mic-active');
         showToast('Listening...');
-
         recognition.onresult = (event) => {
             let finalTranscript = '', interimTranscript = '';
             for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -1565,7 +1613,7 @@ CRITICAL RULES:
     function stopListening() {
         if (recognition && isListening) {
             isListening = false;
-            try { recognition.stop(); } catch (e) { }
+            try { recognition.stop(); } catch (e) {}
         }
         document.querySelectorAll('.icon-btn.mic-active').forEach(btn => btn.classList.remove('mic-active'));
     }
@@ -1573,7 +1621,7 @@ CRITICAL RULES:
     document.getElementById('btnMic').addEventListener('click', () => startListening(document.getElementById('btnMic')));
     document.getElementById('btnMicWelcome').addEventListener('click', () => startListening(document.getElementById('btnMicWelcome')));
 
-    // Clear cache
+    // Clear cache button in settings (unchanged)
     const settingsModal = document.querySelector('#settingsModalOverlay .modal');
     if (settingsModal) {
         const clearCacheBtn = document.createElement('button');
@@ -1587,13 +1635,12 @@ CRITICAL RULES:
             confirmClearDialog.classList.remove('hidden');
         });
         const modalButtons = settingsModal.querySelector('.modal-buttons');
-        if (modalButtons) { modalButtons.parentNode.insertBefore(clearCacheBtn, modalButtons); }
-        else { settingsModal.appendChild(clearCacheBtn); }
+        if (modalButtons) modalButtons.parentNode.insertBefore(clearCacheBtn, modalButtons);
+        else settingsModal.appendChild(clearCacheBtn);
     }
 
-    // Input focus scroll
     function scrollInputIntoView(e) {
-        if (window.innerWidth <= 768) return; // FIX: Prevent jumping / scrolling issues on mobile keyboard popup
+        if (window.innerWidth <= 768) return;
         setTimeout(() => {
             const wrapper = e.target.closest('.input-container-wrapper') || e.target.closest('.welcome-input-container');
             if (wrapper) wrapper.scrollIntoView({ block: 'end', behavior: 'smooth' });
@@ -1608,14 +1655,13 @@ CRITICAL RULES:
         setTimeout(() => { splashOverlay.style.display = 'none'; }, 500);
         app.classList.add('visible');
     }
+
     async function startApp() {
         console.log("App Init: Checking bridge...");
         loadPersistedData();
         if (activeConversationId) {
             const conv = allConversations.find(c => c.id === activeConversationId);
-            if (conv) {
-                loadConversation(activeConversationId);
-            }
+            if (conv) loadConversation(activeConversationId);
         }
         try {
             showToast('Initializing Aethos AI...');
@@ -1632,13 +1678,10 @@ CRITICAL RULES:
             showToast('Init error: ' + e.message);
         }
         toggleSendButtonState();
-        if (!activeConversationId) {
-            welcomeUserInput.focus();
-        }
+        if (!activeConversationId) welcomeUserInput.focus();
     }
 
     if (splashLogoImg) splashLogoImg.src = (savedTheme === 'dark') ? 'logo-white.png' : 'logo-black.png';
-
     setTimeout(() => { hideSplash(); startApp(); }, 2500);
     setActiveInput('welcome');
 })();
