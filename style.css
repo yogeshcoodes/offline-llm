@@ -1876,14 +1876,14 @@ header, .app-header, .header {
     max-height: 500px;
 }
 
-/* Custom scrollbar for chat area only – touchable, no arrows */
+/* Custom scrollbar for chat area only – thin, touchable, no arrows, not themed */
 #chatArea {
     scrollbar-width: thin;
-    scrollbar-color: var(--primary) transparent;
+    scrollbar-color: rgba(128, 128, 128, 0.5) transparent;
 }
 
 #chatArea::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
     background: transparent;
 }
 
@@ -1892,15 +1892,12 @@ header, .app-header, .header {
 }
 
 #chatArea::-webkit-scrollbar-thumb {
-    background: var(--primary);
-    border-radius: 10px;
-    border: 2px solid transparent;
-    background-clip: content-box;
+    background: rgba(128, 128, 128, 0.5);
+    border-radius: 3px;
 }
 
 #chatArea::-webkit-scrollbar-thumb:hover {
-    background: var(--primary);
-    opacity: 0.8;
+    background: rgba(128, 128, 128, 0.8);
 }
 
 #chatArea::-webkit-scrollbar-button {
