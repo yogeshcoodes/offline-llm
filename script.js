@@ -619,7 +619,7 @@ CRITICAL RULES:
         hideThinkingIndicator();
         const bubble = document.createElement('div');
         bubble.className = 'thinking-indicator';
-        bubble.innerHTML = '<span class="think-text">THINKING</span>';
+        bubble.innerHTML = '<span class="think-text">Thinking</span>';
         chatArea.appendChild(bubble);
         currentThinkingBubble = bubble;
         scrollToBottom();
@@ -1102,7 +1102,6 @@ CRITICAL RULES:
             }
         } catch (err) {
             if (err.name === 'AbortError') {
-                showToast('Generation stopped.');
             } else {
                 showTypingIndicator(false);
                 hideThinkingIndicator();
